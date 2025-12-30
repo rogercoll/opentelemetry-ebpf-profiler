@@ -146,9 +146,9 @@ type StackDeltaPageKey struct {
 }
 type SystemAnalysis struct {
 	Address   uint64
-	Pid       uint32
+	Done      bool
 	Code      [128]uint8
-	Pad_cgo_0 [4]byte
+	Pad_cgo_0 [7]byte
 }
 type TSDInfo struct {
 	Offset     int16

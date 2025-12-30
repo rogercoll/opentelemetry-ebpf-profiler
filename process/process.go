@@ -45,6 +45,8 @@ type systemProcess struct {
 	remoteMemory   remotememory.RemoteMemory
 
 	fileToMapping map[string]*Mapping
+
+	rootFs string
 }
 
 var _ Process = &systemProcess{}
@@ -66,11 +68,12 @@ func init() {
 }
 
 // New returns an object with Process interface accessing it
-func New(pid, tid libpf.PID) Process {
+func New(pid, tid libpf.PID, procRootPath string) Process {
 	return &systemProcess{
 		pid:          pid,
 		tid:          tid,
 		remoteMemory: remotememory.NewProcessVirtualMemory(pid),
+		rootFs:       procRootPath,
 	}
 }
 
@@ -83,7 +86,7 @@ func (sp *systemProcess) GetMachineData() MachineData {
 }
 
 func (sp *systemProcess) GetExe() (libpf.String, error) {
-	str, err := os.Readlink(fmt.Sprintf("/proc/%d/exe", sp.pid))
+	str, err := os.Readlink(path.Join(sp.rootFs, fmt.Sprintf("/proc/%d/exe", sp.pid)))
 	if err != nil {
 		return libpf.NullString, err
 	}
@@ -93,13 +96,13 @@ func (sp *systemProcess) GetExe() (libpf.String, error) {
 func (sp *systemProcess) GetProcessMeta(cfg MetaConfig) ProcessMeta {
 	var processName libpf.String
 	exePath, _ := sp.GetExe()
-	if name, err := os.ReadFile(fmt.Sprintf("/proc/%d/comm", sp.pid)); err == nil {
+	if name, err := os.ReadFile(path.Join(sp.rootFs, fmt.Sprintf("/proc/%d/comm", sp.pid))); err == nil {
 		processName = libpf.Intern(pfunsafe.ToString(name))
 	}
 
 	var envVarMap map[libpf.String]libpf.String
 	if len(cfg.IncludeEnvVars) > 0 {
-		if envVars, err := os.ReadFile(fmt.Sprintf("/proc/%d/environ", sp.pid)); err == nil {
+		if envVars, err := os.ReadFile(path.Join(sp.rootFs, fmt.Sprintf("/proc/%d/environ", sp.pid))); err == nil {
 			envVarMap = make(map[libpf.String]libpf.String, len(cfg.IncludeEnvVars))
 			// environ has environment variables separated by a null byte (hex: 00)
 			splittedVars := strings.Split(pfunsafe.ToString(envVars), "\000")
@@ -115,7 +118,7 @@ func (sp *systemProcess) GetProcessMeta(cfg MetaConfig) ProcessMeta {
 		}
 	}
 
-	containerID, err := extractContainerID(sp.pid)
+	containerID, err := sp.extractContainerID()
 	if err != nil {
 		log.Debugf("Failed extracting containerID for %d: %v", sp.pid, err)
 	}
@@ -156,8 +159,8 @@ func parseContainerID(cgroupFile io.Reader) libpf.String {
 }
 
 // extractContainerID returns the containerID for pid if cgroup v2 is used.
-func extractContainerID(pid libpf.PID) (libpf.String, error) {
-	cgroupFile, err := os.Open(fmt.Sprintf("/proc/%d/cgroup", pid))
+func (sp *systemProcess) extractContainerID() (libpf.String, error) {
+	cgroupFile, err := os.Open(path.Join(sp.rootFs, fmt.Sprintf("/proc/%d/cgroup", sp.pid)))
 	if err != nil {
 		return libpf.NullString, err
 	}
@@ -311,7 +314,7 @@ func parseMappings(mapsFile io.Reader) ([]Mapping, uint32, error) {
 // WARNING: This implementation does not support calling GetMappings
 // concurrently with itself, or with OpenELF.
 func (sp *systemProcess) GetMappings() ([]Mapping, uint32, error) {
-	mapsFile, err := os.Open(fmt.Sprintf("/proc/%d/maps", sp.pid))
+	mapsFile, err := os.Open(path.Join(sp.rootFs, fmt.Sprintf("/proc/%d/maps", sp.pid)))
 	if err != nil {
 		return nil, 0, err
 	}
@@ -336,7 +339,7 @@ func (sp *systemProcess) GetMappings() ([]Mapping, uint32, error) {
 		}
 
 		log.Debugf("TID: %v extracting mappings", sp.tid)
-		mapsFileAlt, err := os.Open(fmt.Sprintf("/proc/%d/task/%d/maps", sp.pid, sp.tid))
+		mapsFileAlt, err := os.Open(path.Join(sp.rootFs, fmt.Sprintf("/proc/%d/task/%d/maps", sp.pid, sp.tid)))
 		// On all errors resulting from trying to get mappings from a different thread,
 		// return ErrNoMappings which will keep the PID tracked in processmanager and
 		// allow for a future iteration to try extracting mappings from a different thread.
@@ -395,9 +398,9 @@ func (sp *systemProcess) getMappingFile(m *Mapping) string {
 		// nor /proc/sp.pid/root exist if main thread has exited, so we use the
 		// mapping path directly under the sp.tid root.
 		rootPath := fmt.Sprintf("/proc/%v/task/%v/root", sp.pid, sp.tid)
-		return path.Join(rootPath, m.Path.String())
+		return path.Join(sp.rootFs, rootPath, m.Path.String())
 	}
-	return fmt.Sprintf("/proc/%v/map_files/%x-%x", sp.pid, m.Vaddr, m.Vaddr+m.Length)
+	return path.Join(sp.rootFs, fmt.Sprintf("/proc/%v/map_files/%x-%x", sp.pid, m.Vaddr, m.Vaddr+m.Length))
 }
 
 func (sp *systemProcess) OpenMappingFile(m *Mapping) (ReadAtCloser, error) {
@@ -456,5 +459,5 @@ func (sp *systemProcess) OpenELF(file string) (*pfelf.File, error) {
 	}
 
 	// Fall back to opening the file using the process specific root
-	return pfelf.Open(path.Join("/proc", strconv.Itoa(int(sp.pid)), "root", file))
+	return pfelf.Open(path.Join(sp.rootFs, "/proc", strconv.Itoa(int(sp.pid)), "root", file))
 }

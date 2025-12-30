@@ -61,6 +61,10 @@ const (
 	schedProcessFreeV2 = "tracepoint__sched_process_free"
 )
 
+const (
+	defaultRootFsPath = "/"
+)
+
 // Intervals is a subset of config.IntervalsAndTimers.
 type Intervals interface {
 	MonitorInterval() time.Duration
@@ -117,6 +121,8 @@ type Tracer struct {
 
 	// filterIdleFrames indicates whether idle frames should be filtered.
 	filterIdleFrames bool
+
+	procPath string
 }
 
 type Config struct {
@@ -158,6 +164,7 @@ type Config struct {
 	// LoadProbe indicates whether the generic eBPF program should be loaded
 	// without being attached to something.
 	LoadProbe bool
+	RootFs    string
 }
 
 // hookPoint specifies the group and name of the hooked point in the kernel.
@@ -198,7 +205,11 @@ func schedProcessFreeHookName(progNames libpf.Set[string]) string {
 
 // NewTracer loads eBPF code and map definitions from the ELF module at the configured path.
 func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
-	kernelSymbolizer, err := kallsyms.NewSymbolizer()
+	if cfg.RootFs == "" {
+		cfg.RootFs = defaultRootFsPath
+	}
+
+	kernelSymbolizer, err := kallsyms.NewSymbolizer(cfg.RootFs)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read kernel symbols: %v", err)
 	}
@@ -224,7 +235,7 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 	processManager, err := pm.New(ctx, cfg.IncludeTracers, cfg.Intervals.MonitorInterval(),
 		ebpfHandler, cfg.TraceReporter, cfg.ExecutableReporter,
 		elfunwindinfo.NewStackDeltaProvider(),
-		cfg.FilterErrorFrames, cfg.IncludeEnvVars)
+		cfg.FilterErrorFrames, cfg.IncludeEnvVars, cfg.RootFs)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create processManager: %v", err)
 	}
@@ -245,6 +256,7 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 		samplesPerSecond:       cfg.SamplesPerSecond,
 		probabilisticInterval:  cfg.ProbabilisticInterval,
 		probabilisticThreshold: cfg.ProbabilisticThreshold,
+		procPath:               cfg.RootFs,
 	}
 
 	return tracer, nil

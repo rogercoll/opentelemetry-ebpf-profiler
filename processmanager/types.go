@@ -112,6 +112,8 @@ type ProcessManager struct {
 
 	// includeEnvVars holds a list of env vars that should be captured from processes
 	includeEnvVars libpf.Set[string]
+
+	procFsPath string
 }
 
 // Mapping represents an executable memory mapping of a process.

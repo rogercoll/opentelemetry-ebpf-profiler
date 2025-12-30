@@ -876,7 +876,7 @@ typedef struct OffsetRange {
 // SystemAnalysis is the structure in system_analysis map
 typedef struct SystemAnalysis {
   u64 address;
-  u32 pid;
+  bool done;
   u8 code[128];
 } SystemAnalysis;
 
