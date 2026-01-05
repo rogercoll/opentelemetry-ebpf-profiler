@@ -21,6 +21,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/interpreter/golabels"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/hotspot"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/nodev8"
+	"go.opentelemetry.io/ebpf-profiler/interpreter/ocaml"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/perl"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/php"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/python"
@@ -123,6 +124,9 @@ func NewExecutableInfoManager(
 	}
 	if includeTracers.Has(types.BEAMTracer) {
 		interpreterLoaders = append(interpreterLoaders, beam.Loader)
+	}
+	if includeTracers.Has(types.OCamlTracer) {
+		interpreterLoaders = append(interpreterLoaders, ocaml.Loader)
 	}
 
 	interpreterLoaders = append(interpreterLoaders, apmint.Loader)

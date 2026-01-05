@@ -51,6 +51,7 @@ const (
 	ProgUnwindDotnet  = C.PROG_UNWIND_DOTNET
 	ProgGoLabels      = C.PROG_GO_LABELS
 	ProgUnwindBEAM    = C.PROG_UNWIND_BEAM
+	ProgUnwindOcaml   = C.PROG_UNWIND_OCAML
 )
 
 const (

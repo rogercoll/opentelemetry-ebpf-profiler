@@ -44,6 +44,7 @@ const (
 	ProgUnwindDotnet  = 0x8
 	ProgGoLabels      = 0x9
 	ProgUnwindBEAM    = 0xa
+	ProgUnwindOcaml   = 0xb
 )
 
 const (

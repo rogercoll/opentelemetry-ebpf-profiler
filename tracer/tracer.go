@@ -413,6 +413,11 @@ func initializeMapsAndPrograms(kmod *kallsyms.Module, cfg *Config) (
 			name:   "unwind_beam",
 			enable: cfg.IncludeTracers.Has(types.BEAMTracer),
 		},
+		{
+			progID: uint32(support.ProgUnwindOcaml),
+			name:   "unwind_ocaml",
+			enable: cfg.IncludeTracers.Has(types.OCamlTracer),
+		},
 	}
 
 	if err = loadPerfUnwinders(coll, ebpfProgs, ebpfMaps["perf_progs"], tailCallProgs,

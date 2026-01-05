@@ -336,6 +336,7 @@ typedef enum TracePrograms {
   PROG_UNWIND_DOTNET,
   PROG_GO_LABELS,
   PROG_UNWIND_BEAM,
+  PROG_UNWIND_OCAML,
   NUM_TRACER_PROGS,
 } TracePrograms;
 
