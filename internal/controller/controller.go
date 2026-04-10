@@ -12,7 +12,6 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
-	"go.opentelemetry.io/ebpf-profiler/metrics"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
 	"go.opentelemetry.io/ebpf-profiler/times"
 	"go.opentelemetry.io/ebpf-profiler/tracer"
@@ -92,6 +91,7 @@ func (c *Controller) Start(ctx context.Context) error {
 
 	// Load the eBPF code and map definitions
 	trc, err := tracer.NewTracer(ctx, &tracer.Config{
+		TelemetryBuilder:       c.config.TelemetryBuilder,
 		TraceReporter:          c.reporter,
 		Intervals:              intervals,
 		IncludeTracers:         includeTracers,
@@ -122,7 +122,9 @@ func (c *Controller) Start(ctx context.Context) error {
 
 	trc.StartPIDEventProcessor(ctx)
 
-	metrics.Add(metrics.IDProcPIDStartupMs, metrics.MetricValue(time.Since(now).Milliseconds()))
+	if c.config.TelemetryBuilder != nil {
+		c.config.TelemetryBuilder.AgentTimeProcPidStartup.Add(ctx, time.Since(now).Milliseconds())
+	}
 	log.Debug("Completed initial PID listing")
 
 	// Attach our tracer to the perf event

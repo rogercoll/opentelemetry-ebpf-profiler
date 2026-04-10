@@ -8,7 +8,9 @@ import (
 
 	"go.opentelemetry.io/collector/consumer/xconsumer"
 	"go.opentelemetry.io/ebpf-profiler/collector/config"
+	"go.opentelemetry.io/ebpf-profiler/collector/telemetry"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
+	"go.opentelemetry.io/otel/metric"
 )
 
 type Config struct {
@@ -21,6 +23,16 @@ type Config struct {
 
 	ExecutableReporter reporter.ExecutableReporter
 	OnShutdown         func() error
+
+	// TelemetryBuilder provides access to the OTel TelemetryBuilder for recording metrics.
+	TelemetryBuilder *telemetry.TelemetryBuilder
+
+	// Meter provides the OTel metric.Meter scoped to this component.
+	// Lower-level packages (tracer, processmanager, interpreters) can use it
+	// to create observable (async/callback) instruments that are recorded
+	// under the same instrumentation scope as the TelemetryBuilder.
+	// Instrument names must include the "otelcol_" prefix to match.
+	Meter metric.Meter
 
 	// If ReporterFactory is set, it will be used to create a Reporter and set it as the Reporter field.
 	// Either ReporterFactory or Reporter must be set. If both are set, ReporterFactory will be used.

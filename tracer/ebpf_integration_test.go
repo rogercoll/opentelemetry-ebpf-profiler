@@ -22,18 +22,13 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
-	"go.opentelemetry.io/ebpf-profiler/metrics"
 	"go.opentelemetry.io/ebpf-profiler/rlimit"
 	"go.opentelemetry.io/ebpf-profiler/support"
 	"go.opentelemetry.io/ebpf-profiler/tracer"
 	tracertypes "go.opentelemetry.io/ebpf-profiler/tracer/types"
-	"go.opentelemetry.io/otel/metric/noop"
 )
 
 func TestMain(m *testing.M) {
-	// Initialize metrics once to avoid concurrent map access between
-	// metrics.Start() and metrics.AddSlice() called from lingering periodiccaller goroutines.
-	metrics.Start(noop.Meter{})
 	os.Exit(m.Run())
 }
 

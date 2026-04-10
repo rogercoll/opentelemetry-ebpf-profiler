@@ -10,9 +10,9 @@ import (
 	"go.opentelemetry.io/collector/consumer/xconsumer"
 	"go.opentelemetry.io/collector/receiver"
 	"go.opentelemetry.io/ebpf-profiler/collector/config"
+	"go.opentelemetry.io/ebpf-profiler/collector/internal/metadata"
 	"go.opentelemetry.io/ebpf-profiler/internal/controller"
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
-	"go.opentelemetry.io/ebpf-profiler/metrics"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
 	"go.opentelemetry.io/ebpf-profiler/times"
 	"go.opentelemetry.io/ebpf-profiler/vc"
@@ -26,6 +26,7 @@ const (
 // interface and our [internal.Controller].
 type Controller struct {
 	ctlr       *controller.Controller
+	tb         *metadata.TelemetryBuilder
 	onShutdown func() error
 	errorMode  config.ErrorMode
 }
@@ -59,11 +60,15 @@ func NewController(cfg *controller.Config, rs receiver.Settings,
 	}
 	cfg.Reporter = rep
 
-	// Provide internal metrics via the collectors telemetry.
-	meter := rs.MeterProvider.Meter(ctrlName)
-	metrics.Start(meter)
+	tb, err := metadata.NewTelemetryBuilder(rs.TelemetrySettings)
+	if err != nil {
+		return nil, err
+	}
+
+	cfg.TelemetryBuilder = tb
 
 	return &Controller{
+		tb:         tb,
 		onShutdown: cfg.OnShutdown,
 		ctlr:       controller.New(cfg),
 		errorMode:  cfg.ErrorMode,
@@ -86,6 +91,9 @@ func (c *Controller) Start(ctx context.Context, _ component.Host) error {
 // Shutdown stops the receiver.
 func (c *Controller) Shutdown(_ context.Context) error {
 	c.ctlr.Shutdown()
+	if c.tb != nil {
+		c.tb.Shutdown()
+	}
 	if c.onShutdown != nil {
 		return c.onShutdown()
 	}

@@ -1,5 +1,6 @@
 type: profiling
 github_project: open-telemetry/opentelemetry-ebpf-profiler
+scope_name: go.opentelemetry.io/ebpf-profiler/collector
 
 status:
   disable_codecov_badge: true
@@ -9,3 +10,1701 @@ status:
   distributions: [ebpf-profiler]
 tests:
   skip_lifecycle: true
+
+telemetry:
+  metrics:
+    agent.dotnet.addr_to_method.hits:
+      enabled: true
+      stability: development
+      description: "Number of cache hits for dotnet AddrToMethod"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    agent.dotnet.addr_to_method.misses:
+      enabled: true
+      stability: development
+      description: "Number of cache misses for dotnet AddrToMethod"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    agent.dotnet.symbolization.failures:
+      enabled: true
+      stability: development
+      description: "Number of dotnet frames that failed symbolization"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    agent.dotnet.symbolization.successes:
+      enabled: true
+      stability: development
+      description: "Number of successfully symbolized dotnet frames"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    agent.elf_info_cache.hits:
+      enabled: true
+      stability: development
+      description: "Number of cache hits for ELF information"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    agent.elf_info_cache.misses:
+      enabled: true
+      stability: development
+      description: "Number of cache misses for ELF information"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    agent.errors.exe_id_to_stack_deltas_batch_update:
+      enabled: true
+      stability: development
+      description: "Number of times batch updating elements in exeIDToStackDeltas failed"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    agent.errors.exe_id_to_stack_deltas_update:
+      enabled: true
+      stability: development
+      description: "Number of times updating an element in exeIDToStackDeltas failed"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    agent.errors.perf_event_lost:
+      enabled: true
+      stability: development
+      description: "Number of lost perf events in the communication between kernel and user space (report_events)"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    agent.errors.perf_event_no_data:
+      enabled: true
+      stability: development
+      description: "Number of times a perf event was received without data (report_events)"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    agent.errors.perf_event_read_error:
+      enabled: true
+      stability: development
+      description: "Number of times a perf event read failed (report_events)"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    agent.errors.pid_page_to_mapping_info_batch_delete:
+      enabled: true
+      stability: development
+      description: "Number of times batch deleting elements from pidPageToMappingInfo failed"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    agent.errors.pid_page_to_mapping_info_delete:
+      enabled: true
+      stability: development
+      description: "Number of times deleting an element from pidPageToMappingInfo failed"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    agent.errors.pid_page_to_mapping_info_update:
+      enabled: true
+      stability: development
+      description: "Number of times updating an element in pidPageToMappingInfo failed"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    agent.errors.proc_esrch:
+      enabled: true
+      stability: development
+      description: "Number of times process exits while reading /proc/<PID>"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    agent.errors.proc_not_exists:
+      enabled: true
+      stability: development
+      description: "Number of times reading /proc/<PID> as it does not exist anymore"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    agent.errors.proc_parse:
+      enabled: true
+      stability: development
+      description: "Number of parsing errors seen during processing /proc/<PID>/maps"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    agent.errors.proc_perm:
+      enabled: true
+      stability: development
+      description: "Number of times reading /proc/<PID> failed due to missing permission"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    agent.errors.stack_delta_page_to_info_batch_update:
+      enabled: true
+      stability: development
+      description: "Number of times batch updating elements in stackDeltaPageToInfo failed"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    agent.errors.stack_delta_page_to_info_delete:
+      enabled: true
+      stability: development
+      description: "Number of times deleting an element from stackDeltaPageToInfo failed"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    agent.errors.stack_delta_page_to_info_update:
+      enabled: true
+      stability: development
+      description: "Number of times updating an element in stackDeltaPageToInfo failed"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    agent.errors.stack_delta_provider_extraction:
+      enabled: true
+      stability: development
+      description: "Number of times the stack delta provider failed to extract stack deltas"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    agent.errors.trace_event_lost:
+      enabled: true
+      stability: development
+      description: "Number of lost trace events in the communication between kernel and user space (trace_events)"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    agent.errors.trace_event_no_data:
+      enabled: true
+      stability: development
+      description: "Number of times a trace event was received without data (trace_events)"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    agent.errors.trace_event_read_error:
+      enabled: true
+      stability: development
+      description: "Number of times a trace event read failed (trace_events)"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    agent.errors.unwind_info_array_update:
+      enabled: true
+      stability: development
+      description: "Number of times updating an element in unwindInfoArray failed"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    agent.go.symbolization.failures:
+      enabled: true
+      stability: development
+      description: "Number of Go frames that failed symbolization"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    agent.go.symbolization.successes:
+      enabled: true
+      stability: development
+      description: "Number of successfully symbolized Go frames"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    agent.hashmap_pid_page_to_mapping_info.size:
+      enabled: true
+      stability: development
+      description: "Current size of the hash map pid_page_to_mapping_info"
+      unit: "1"
+      gauge:
+        value_type: int
+    agent.hotspot.addr_to_jit_info.add:
+      enabled: true
+      stability: development
+      description: "Number of added cache elements for Hotspot AddrToJITInfo"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    agent.hotspot.addr_to_jit_info.del:
+      enabled: true
+      stability: development
+      description: "Number of deleted cache elements for Hotspot AddrToJITInfo"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    agent.hotspot.addr_to_jit_info.hits:
+      enabled: true
+      stability: development
+      description: "Number of cache hits for Hotspot AddrToJITInfo"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    agent.hotspot.addr_to_jit_info.misses:
+      enabled: true
+      stability: development
+      description: "Number of cache misses for Hotspot AddrToJITInfo"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    agent.hotspot.addr_to_method.add:
+      enabled: true
+      stability: development
+      description: "Number of added cache elements for Hotspot AddrToMethod"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    agent.hotspot.addr_to_method.del:
+      enabled: true
+      stability: development
+      description: "Number of deleted cache elements for Hotspot AddrToMethod"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    agent.hotspot.addr_to_method.hits:
+      enabled: true
+      stability: development
+      description: "Number of cache hits for Hotspot AddrToMethod"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    agent.hotspot.addr_to_method.misses:
+      enabled: true
+      stability: development
+      description: "Number of cache misses for Hotspot AddrToMethod"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    agent.hotspot.addr_to_stub_name.add:
+      enabled: true
+      stability: development
+      description: "Number of added cache elements for Hotspot AddrToStubNameID"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    agent.hotspot.addr_to_stub_name.del:
+      enabled: true
+      stability: development
+      description: "Number of deleted cache elements for Hotspot AddrToStubNameID"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    agent.hotspot.addr_to_stub_name_id.hits:
+      enabled: true
+      stability: development
+      description: "Number of cache hits for Hotspot AddrToStubNameID"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    agent.hotspot.addr_to_stub_name_id.misses:
+      enabled: true
+      stability: development
+      description: "Number of cache misses for Hotspot AddrToStubNameID"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    agent.hotspot.addr_to_symbol.add:
+      enabled: true
+      stability: development
+      description: "Number of added cache elements for Hotspot AddrToSymbol"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    agent.hotspot.addr_to_symbol.del:
+      enabled: true
+      stability: development
+      description: "Number of deleted cache elements for Hotspot AddrToSymbol"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    agent.hotspot.addr_to_symbol.hits:
+      enabled: true
+      stability: development
+      description: "Number of cache hits for Hotspot AddrToSymbol"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    agent.hotspot.addr_to_symbol.misses:
+      enabled: true
+      stability: development
+      description: "Number of cache misses for Hotspot AddrToSymbol"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    agent.hotspot.symbolization.failures:
+      enabled: true
+      stability: development
+      description: "Number of Hotspot frames that failed symbolization"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    agent.hotspot.symbolization.successes:
+      enabled: true
+      stability: development
+      description: "Number of successfully symbolized hotspot frames"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    agent.kernel.fallback_symbol_lru.hits:
+      enabled: true
+      stability: development
+      description: "Number of LRU hits for kernel symbols"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    agent.kernel.fallback_symbol_lru.misses:
+      enabled: true
+      stability: development
+      description: "Number of LRU mises for kernel symbols"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    agent.max_proc_parse.us:
+      enabled: true
+      stability: development
+      description: "Max /proc/PID/maps parse time for a single collection interval."
+      unit: "us"
+      gauge:
+        value_type: int
+    agent.num_exe_id_loaded_to_ebpf:
+      enabled: true
+      stability: development
+      description: "The number of executables loaded to eBPF maps"
+      unit: "1"
+      gauge:
+        value_type: int
+    agent.num_generic_pid:
+      enabled: true
+      stability: development
+      description: "Number of generic PID events (report_events)"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    agent.num_proc_attempts:
+      enabled: true
+      stability: development
+      description: "Number of /proc/PID/maps process attempts"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    agent.perl.addr_to_cop.add:
+      enabled: true
+      stability: development
+      description: "Number of added cache elements for Perl AddrToCOP"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    agent.perl.addr_to_cop.del:
+      enabled: true
+      stability: development
+      description: "Number of deleted cache elements for Perl AddrToCOP"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    agent.perl.addr_to_cop.hits:
+      enabled: true
+      stability: development
+      description: "Number of cache hits for Perl AddrToCOP"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    agent.perl.addr_to_cop.misses:
+      enabled: true
+      stability: development
+      description: "Number of cache misses for Perl AddrToCOP"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    agent.perl.addr_to_gv.add:
+      enabled: true
+      stability: development
+      description: "Number of added cache elements for Perl AddrToGV"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    agent.perl.addr_to_gv.del:
+      enabled: true
+      stability: development
+      description: "Number of deleted cache elementes Perl AddrToGV"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    agent.perl.addr_to_gv.hits:
+      enabled: true
+      stability: development
+      description: "Number of cache hits for Perl AddrToGV"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    agent.perl.addr_to_gv.misses:
+      enabled: true
+      stability: development
+      description: "Number of cache misses for Perl AddrToGV"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    agent.perl.addr_to_hek.add:
+      enabled: true
+      stability: development
+      description: "Number of added cache elements for Perl AddrToHEK"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    agent.perl.addr_to_hek.del:
+      enabled: true
+      stability: development
+      description: "Number of deleted cache elements for Perl AddrToHEK"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    agent.perl.addr_to_hek.hits:
+      enabled: true
+      stability: development
+      description: "Number of cache hits for Perl AddrToHEK"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    agent.perl.addr_to_hek.misses:
+      enabled: true
+      stability: development
+      description: "Number of cache misses for Perl AddrToHEK"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    agent.perl.hek_len:
+      enabled: true
+      stability: development
+      description: "Maximum number of hekLen that was requested within the last reporting interval."
+      unit: "1"
+      gauge:
+        value_type: int
+    agent.perl.symbolization.failures:
+      enabled: true
+      stability: development
+      description: "Number of Perl frames that failed symbolization"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    agent.perl.symbolization.successes:
+      enabled: true
+      stability: development
+      description: "Number of successfully symbolized Perl frames"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    agent.php.addr_to_func.add:
+      enabled: true
+      stability: development
+      description: "Number of added cache elements for PHP AddrToFunc"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    agent.php.addr_to_func.del:
+      enabled: true
+      stability: development
+      description: "Number of deleted cache elements for PHP AddrToFunc"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    agent.php.addr_to_func.hits:
+      enabled: true
+      stability: development
+      description: "Number of cache hits for PHP AddrToFunc"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    agent.php.addr_to_func.misses:
+      enabled: true
+      stability: development
+      description: "Number of cache misses for PHP AddrToFunc"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    agent.php.errors.failed_to_find_return_address:
+      enabled: true
+      stability: development
+      description: "Number of times finding the return address in the interpreter loop failed for PHP 8+."
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    agent.php.symbolization.failures:
+      enabled: true
+      stability: development
+      description: "Number of PHP frames that failed symbolization"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    agent.php.symbolization.successes:
+      enabled: true
+      stability: development
+      description: "Number of successfully symbolized PHP frames"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    agent.python.addr_to_code_object.add:
+      enabled: true
+      stability: development
+      description: "Number of added cache elements for Python AddrToCodeObject"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    agent.python.addr_to_code_object.del:
+      enabled: true
+      stability: development
+      description: "Number of deleted cache elements for Python AddrToCodeObject"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    agent.python.addr_to_code_object.hits:
+      enabled: true
+      stability: development
+      description: "Number of cache hits for Python AddrToCodeObject"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    agent.python.addr_to_code_object.misses:
+      enabled: true
+      stability: development
+      description: "Number of cache misses for Python AddrToCodeObject"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    agent.python.symbolization.failures:
+      enabled: true
+      stability: development
+      description: "Number of Python frames that failed symbolization"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    agent.python.symbolization.successes:
+      enabled: true
+      stability: development
+      description: "Number of successfully symbolized python frames"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    agent.ruby.addr_to_string.add:
+      enabled: true
+      stability: development
+      description: "Number of added cache elements for Ruby AddrToString"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    agent.ruby.addr_to_string.del:
+      enabled: true
+      stability: development
+      description: "Number of deleted cache elements for Ruby AddrToString"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    agent.ruby.addr_to_string.hits:
+      enabled: true
+      stability: development
+      description: "Number of cache hits for Ruby AddrToString"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    agent.ruby.addr_to_string.misses:
+      enabled: true
+      stability: development
+      description: "Number of cache misses for Ruby AddrToString"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    agent.ruby.max_size:
+      enabled: true
+      stability: development
+      description: "Maximum number of size that was requested within the last reporting interval."
+      unit: "1"
+      gauge:
+        value_type: int
+    agent.ruby.symbolization.failures:
+      enabled: true
+      stability: development
+      description: "Number of Ruby frames that failed symbolization"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    agent.ruby.symbolization.successes:
+      enabled: true
+      stability: development
+      description: "Number of successfully symbolized Ruby frames"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    agent.stack_delta_extraction.success:
+      enabled: true
+      stability: development
+      description: "Number of times the stack delta provider succeeded to extract stack deltas"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    agent.stack_delta_pages.size:
+      enabled: true
+      stability: development
+      description: "Current size of the stack delta pages hash map"
+      unit: "1"
+      gauge:
+        value_type: int
+    agent.time.proc_pid_startup:
+      enabled: true
+      stability: development
+      description: "Time spent processing /proc/PID/maps on startup, in milliseconds"
+      unit: "ms"
+      sum:
+        value_type: int
+        monotonic: true
+    agent.time.total_proc_parse:
+      enabled: true
+      stability: development
+      description: "Total /proc/PID/maps parse time for a single collection interval."
+      unit: "us"
+      sum:
+        value_type: int
+        monotonic: true
+    agent.trace_cache.hits:
+      enabled: true
+      stability: development
+      description: "Number of cache hits in tracehandler trace cache by UM hash"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    agent.trace_cache.misses:
+      enabled: true
+      stability: development
+      description: "Number of cache misses in tracehandler trace cache by UM hash"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    agent.unwind_info_array.size:
+      enabled: true
+      stability: development
+      description: "Current size of the unwind info array"
+      unit: "1"
+      gauge:
+        value_type: int
+    agent.v8.addr_to_func.add:
+      enabled: true
+      stability: development
+      description: "Number of added cache elements for V8 Code/JSFunction"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    agent.v8.addr_to_func.del:
+      enabled: true
+      stability: development
+      description: "Number of deleted cache elements for V8 Code/JSFunction"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    agent.v8.addr_to_func.hits:
+      enabled: true
+      stability: development
+      description: "Number of cache hits for V8 Code/JSFunction"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    agent.v8.addr_to_func.misses:
+      enabled: true
+      stability: development
+      description: "Number of cache misses for V8 Code/JSFunction"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    agent.v8.addr_to_sfi.add:
+      enabled: true
+      stability: development
+      description: "Number of added cache elements for V8 SharedFunctionInfo"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    agent.v8.addr_to_sfi.del:
+      enabled: true
+      stability: development
+      description: "Number of deleted cache elements for V8 SharedFunctionInfo"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    agent.v8.addr_to_sfi.hits:
+      enabled: true
+      stability: development
+      description: "Number of cache hits for V8 SharedFunctionInfo"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    agent.v8.addr_to_sfi.misses:
+      enabled: true
+      stability: development
+      description: "Number of cache misses for V8 SharedFunctionInfo"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    agent.v8.addr_to_source.add:
+      enabled: true
+      stability: development
+      description: "Number of added cache elements for V8 Source"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    agent.v8.addr_to_source.del:
+      enabled: true
+      stability: development
+      description: "Number of deleted cache elements for V8 Source"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    agent.v8.addr_to_source.hits:
+      enabled: true
+      stability: development
+      description: "Number of cache hits for V8 Source"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    agent.v8.addr_to_source.misses:
+      enabled: true
+      stability: development
+      description: "Number of cache misses for V8 Source"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    agent.v8.addr_to_string.add:
+      enabled: true
+      stability: development
+      description: "Number of added cache elements for V8 strings"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    agent.v8.addr_to_string.del:
+      enabled: true
+      stability: development
+      description: "Number of deleted cache elements for V8 strings"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    agent.v8.addr_to_string.hits:
+      enabled: true
+      stability: development
+      description: "Number of cache hits for V8 strings"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    agent.v8.addr_to_string.misses:
+      enabled: true
+      stability: development
+      description: "Number of cache misses for V8 strings"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    agent.v8.symbolization.failures:
+      enabled: true
+      stability: development
+      description: "Number of V8 frames that failed symbolization"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    agent.v8.symbolization.successes:
+      enabled: true
+      stability: development
+      description: "Number of successfully symbolized V8 frames"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    bpf.apmint.errors.read_corr_buf:
+      enabled: true
+      stability: development
+      description: "Number of failures read the APM correlation buffer"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    bpf.apmint.errors.read_corr_buf_ptr:
+      enabled: true
+      stability: development
+      description: "Number of failures read the APM correlation pointer"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    bpf.apmint.errors.read_tsd_base:
+      enabled: true
+      stability: development
+      description: "Number of failures to get TSD base for APM correlation"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    bpf.apmint.read.successes:
+      enabled: true
+      stability: development
+      description: "Number of successful reads of APM correlation info"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    bpf.dotnet.attempts:
+      enabled: true
+      stability: development
+      description: "Number of attempted dotnet unwinds"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    bpf.dotnet.errors.bad_fp:
+      enabled: true
+      stability: development
+      description: "Number of failures to read dotnet frame pointer data"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    bpf.dotnet.errors.code_header:
+      enabled: true
+      stability: development
+      description: "Number of failures to read dotnet CodeHeader"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    bpf.dotnet.errors.code_too_large:
+      enabled: true
+      stability: development
+      description: "Number of failures to unwind dotnet frame due to large code size"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    bpf.dotnet.errors.no_proc_info:
+      enabled: true
+      stability: development
+      description: "Number of times we didn't find an entry for this process in the dotnet process info array"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    bpf.dotnet.frames:
+      enabled: true
+      stability: development
+      description: "Number of unwound dotnet frames"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    bpf.errors.bad_dtv_read:
+      enabled: true
+      stability: development
+      description: "Number of failures to read TLS variables via the DTV"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    bpf.errors.bad_tls_addr:
+      enabled: true
+      stability: development
+      description: "Number of failures to read from the TLS"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    bpf.errors.bad_tp_base_addr:
+      enabled: true
+      stability: development
+      description: "Number of failures to get the TLS base in tls_get_base()"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    bpf.errors.bpf_current_comm:
+      enabled: true
+      stability: development
+      description: "Number of times the bpf helper failed to get the current comm of the task"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    bpf.errors.empty_stack:
+      enabled: true
+      stability: development
+      description: "Number of times unwind_stop is called without a trace"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    bpf.errors.pid_events:
+      enabled: true
+      stability: development
+      description: "Number of times we failed to update pid_events"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    bpf.errors.reported_pids:
+      enabled: true
+      stability: development
+      description: "Number of times we failed to update reported_pids"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    bpf.errors.stack_length_exceeded:
+      enabled: true
+      stability: development
+      description: "Number of times MAX_FRAME_UNWINDS has been exceeded in unwind_next_frame()"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    bpf.errors.zero_pc:
+      enabled: true
+      stability: development
+      description: "Number of failures due to PC == 0 in unwind_next_frame()"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    bpf.golabels.attempts:
+      enabled: true
+      stability: development
+      description: "Number of attempts to read Go custom labels"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    bpf.golabels.errors:
+      enabled: true
+      stability: development
+      description: "Number of failures reading Go custom labels"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    bpf.hotspot.attempts:
+      enabled: true
+      stability: development
+      description: "Number of attempted Hotspot frame unwinds"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    bpf.hotspot.errors.interpreter_fp:
+      enabled: true
+      stability: development
+      description: "Number of failures to unwind interpreter due to invalid FP"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    bpf.hotspot.errors.invalid_codeblob:
+      enabled: true
+      stability: development
+      description: "Number of failures to get codeblob data"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    bpf.hotspot.errors.invalid_ra:
+      enabled: true
+      stability: development
+      description: "Number of failures to unwind because return address was not found with heuristic"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    bpf.hotspot.errors.lr_unwinding_mid_trace:
+      enabled: true
+      stability: development
+      description: "Number of times the Hotspot unwind instructions requested LR unwinding mid-trace"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    bpf.hotspot.errors.no_codeblob:
+      enabled: true
+      stability: development
+      description: "Number of failures to get hotspot codeblob address (no heap or bad segmap)"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    bpf.hotspot.errors.unsupported_frame_size:
+      enabled: true
+      stability: development
+      description: "Number of times we encountered frame sizes larger than the supported maximum"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    bpf.hotspot.frames:
+      enabled: true
+      stability: development
+      description: "Number of unwound Hotspot frames"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    bpf.interpreter.calls:
+      enabled: true
+      stability: development
+      description: "Number of calls to interpreter unwinding in dispatch_interpreters()"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    bpf.native.attempts:
+      enabled: true
+      stability: development
+      description: "Unwind attempts since the previous check"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    bpf.native.errors.bad_unwind_info_index:
+      enabled: true
+      stability: development
+      description: "Number of times an unwind_info_array index was invalid"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    bpf.native.errors.chase_irq_stack_link:
+      enabled: true
+      stability: development
+      description: "Number of failures to read the IRQ stack link"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    bpf.native.errors.kernel_address:
+      enabled: true
+      stability: development
+      description: "Number of kernel addresses passed to get_text_section()"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    bpf.native.errors.lookup_iterations:
+      enabled: true
+      stability: development
+      description: "Number of failures to get stack_unwind_info from big_stack_deltas in get_stack_delta()"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    bpf.native.errors.lookup_range:
+      enabled: true
+      stability: development
+      description: "Number of failures to get stack_unwind_info from big_stack_deltas in get_stack_delta()"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    bpf.native.errors.lookup_stack_delta_inner_map:
+      enabled: true
+      stability: development
+      description: "Number of times that a lookup of a inner map for stack deltas failed"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    bpf.native.errors.lookup_stack_delta_outer_map:
+      enabled: true
+      stability: development
+      description: "Number of times that a lookup of the outer map for stack deltas failed"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    bpf.native.errors.lookup_text_section:
+      enabled: true
+      stability: development
+      description: "Number of failed range searches within 20 steps in get_stack_delta()"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    bpf.native.errors.lr0:
+      enabled: true
+      stability: development
+      description: "Number of times frame unwinding failed because of LR == 0"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    bpf.native.errors.lr_unwinding_mid_trace:
+      enabled: true
+      stability: development
+      description: "Number of times the unwind instructions requested LR unwinding mid-trace"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    bpf.native.errors.pc_read:
+      enabled: true
+      stability: development
+      description: "Number of times failure to read PC from unwound stack (invalid stack delta)"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    bpf.native.errors.read_kernel_mode_regs:
+      enabled: true
+      stability: development
+      description: "Number of failures to read the kernel-mode registers"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    bpf.native.errors.stack_delta_invalid:
+      enabled: true
+      stability: development
+      description: "Number of invalid stack deltas in the native unwinder"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    bpf.native.errors.wrong_text_section:
+      enabled: true
+      stability: development
+      description: "Number of failures to find the text section in get_text_section()"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    bpf.native.frames:
+      enabled: true
+      stability: development
+      description: "Unwound frames since the previous check"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    bpf.native.small_pc:
+      enabled: true
+      stability: development
+      description: "Number of times that PC hold a value smaller than 0x1000"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    bpf.native.stack_delta_stop:
+      enabled: true
+      stability: development
+      description: "Number of stop stack deltas in the native unwinder (success)"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    bpf.num_proc_exit:
+      enabled: true
+      stability: development
+      description: "Number of exit PID events (report_events)"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    bpf.num_proc_new:
+      enabled: true
+      stability: development
+      description: "Number of new PID events (report_events)"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    bpf.num_unknown_pc:
+      enabled: true
+      stability: development
+      description: "Number of unknown PC events (report_events)"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    bpf.perl.attempts:
+      enabled: true
+      stability: development
+      description: "Number of attempted perl unwinds"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    bpf.perl.errors.read_context_stack_entry:
+      enabled: true
+      stability: development
+      description: "Number of failures to read perl context stack entry"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    bpf.perl.errors.read_stack_info:
+      enabled: true
+      stability: development
+      description: "Number of failures to read perl stack info"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    bpf.perl.errors.resolve_egv:
+      enabled: true
+      stability: development
+      description: "Number of failures to resolve perl EGV"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    bpf.perl.errors.tls:
+      enabled: true
+      stability: development
+      description: "Number of failures to read perl TLS info"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    bpf.perl.frames:
+      enabled: true
+      stability: development
+      description: "Number of unwound perl frames"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    bpf.php.attempts:
+      enabled: true
+      stability: development
+      description: "Number of attempted PHP unwinds"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    bpf.php.errors.bad_current_execute_data:
+      enabled: true
+      stability: development
+      description: "Number of failures to read PHP current execute data pointer"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    bpf.php.errors.bad_zend_execute_data:
+      enabled: true
+      stability: development
+      description: "Number of failures to read PHP execute data contents"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    bpf.php.errors.bad_zend_function:
+      enabled: true
+      stability: development
+      description: "Number of failures to read PHP zend function contents"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    bpf.php.errors.bad_zend_opline:
+      enabled: true
+      stability: development
+      description: "Number of failures to read PHP zend opline contents"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    bpf.php.frames:
+      enabled: true
+      stability: development
+      description: "Number of unwound PHP frames"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    bpf.python.attempts:
+      enabled: true
+      stability: development
+      description: "Number of attempted python unwinds"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    bpf.python.errors.bad_auto_tls_key_addr:
+      enabled: true
+      stability: development
+      description: "Number of failures to read autoTLSkey"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    bpf.python.errors.bad_cframe_frame_addr:
+      enabled: true
+      stability: development
+      description: "Number of failures to read _PyCFrame.current_frame in unwind_python()"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    bpf.python.errors.bad_code_object_arg_count_addr:
+      enabled: true
+      stability: development
+      description: "Number of failures to get code object's argcount in process_python_frame()"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    bpf.python.errors.bad_py_thread_state_current_addr:
+      enabled: true
+      stability: development
+      description: "Number of failures to read from pyinfo->pyThreadStateCurrentAddr"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    bpf.python.errors.bad_thread_state_frame_addr:
+      enabled: true
+      stability: development
+      description: "Number of failures to read PyThreadState.frame in unwind_python()"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    bpf.python.errors.no_proc_info:
+      enabled: true
+      stability: development
+      description: "Number of times we didn't find an entry for this process in the Python process info array"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    bpf.python.errors.read_thread_state_addr:
+      enabled: true
+      stability: development
+      description: "Number of failures to read the thread state pointer from TLD"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    bpf.python.errors.read_tsd_base:
+      enabled: true
+      stability: development
+      description: "Number of failures to determine the base address for thread-specific data"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    bpf.python.errors.zero_thread_state:
+      enabled: true
+      stability: development
+      description: "Number of PyThreadState being 0x0"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    bpf.python.frames:
+      enabled: true
+      stability: development
+      description: "Number of unwound python frames"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    bpf.python.zero_frame_code_object:
+      enabled: true
+      stability: development
+      description: "Number of NULL code objects found in process_python_frame()"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    bpf.ruby.attempts:
+      enabled: true
+      stability: development
+      description: "Number of attempted Ruby unwinds"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    bpf.ruby.errors.invalid_iseq:
+      enabled: true
+      stability: development
+      description: "Number of invalid instruction sequences sequence"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    bpf.ruby.errors.no_proc_info:
+      enabled: true
+      stability: development
+      description: "Number of times we didn't find an entry for this process in the Ruby process info array"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    bpf.ruby.errors.read_cfp:
+      enabled: true
+      stability: development
+      description: "Number of failures to read the control frame pointer from the Ruby context"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    bpf.ruby.errors.read_cme_max_ep:
+      enabled: true
+      stability: development
+      description: "Number of failed attempts to read a CME by exceeding max EP checks"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    bpf.ruby.errors.read_ep:
+      enabled: true
+      stability: development
+      description: "Number of failures to read the expression path from the Ruby frame"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    bpf.ruby.errors.read_iseq_body:
+      enabled: true
+      stability: development
+      description: "Number of failures to read the instruction sequence body"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    bpf.ruby.errors.read_method_def:
+      enabled: true
+      stability: development
+      description: "Number of failures to read the Ruby method definition"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    bpf.ruby.errors.read_method_type:
+      enabled: true
+      stability: development
+      description: "Number of failures to read the Ruby method type"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    bpf.ruby.errors.read_rbasic_flags:
+      enabled: true
+      stability: development
+      description: "Number of failures to read the Ruby rbasic flags"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    bpf.ruby.errors.read_stack_ptr:
+      enabled: true
+      stability: development
+      description: "Number of failures to read the stack pointer from the Ruby context"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    bpf.ruby.errors.read_stack_size:
+      enabled: true
+      stability: development
+      description: "Number of failures to read the size of the VM stack from the Ruby context"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    bpf.ruby.errors.read_svar:
+      enabled: true
+      stability: development
+      description: "Number of failures to read the Ruby svar while finding CME"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    bpf.ruby.frames:
+      enabled: true
+      stability: development
+      description: "Number of unwound Ruby frames"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    bpf.tail_calls_max:
+      enabled: true
+      stability: development
+      description: "Number of times stack unwinding was stopped to not hit the limit of tail calls"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    bpf.v8.attempts:
+      enabled: true
+      stability: development
+      description: "Number of attempted V8 unwinds"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    bpf.v8.errors.bad_code:
+      enabled: true
+      stability: development
+      description: "Number of failures to read V8 Code object"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    bpf.v8.errors.bad_fp:
+      enabled: true
+      stability: development
+      description: "Number of failures to read V8 frame pointer data"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    bpf.v8.errors.bad_js_func:
+      enabled: true
+      stability: development
+      description: "Number of failures to read V8 Code/JSFunction object"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    bpf.v8.errors.no_proc_info:
+      enabled: true
+      stability: development
+      description: "Number of times we didn't find an entry for this process in the V8 process info array"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    bpf.v8.frames:
+      enabled: true
+      stability: development
+      description: "Number of unwound V8 frames"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    perf_event.disable.err:
+      enabled: true
+      stability: development
+      description: "Number of times disabling a perf event hook failed"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    perf_event.enable.err:
+      enabled: true
+      stability: development
+      description: "Number of times enabling a perf event hook failed"
+      unit: "1"
+      sum:
+        value_type: int
+        monotonic: true
+    prob.profiling.interval:
+      enabled: true
+      stability: development
+      description: "Interval in seconds for which probabilistic profiling will be enabled or disabled."
+      unit: "s"
+      gauge:
+        value_type: int
+    prob.profiling.status:
+      enabled: true
+      stability: development
+      description: "Indicates if probabilistic profiling is enabled or disabled: 1 profiling is enabled, -1 profiling is disabled."
+      unit: "1"
+      gauge:
+        value_type: int

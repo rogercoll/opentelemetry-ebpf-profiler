@@ -4,6 +4,7 @@
 package execinfomanager // import "go.opentelemetry.io/ebpf-profiler/processmanager/execinfomanager"
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -14,6 +15,7 @@ import (
 
 	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
+	"go.opentelemetry.io/ebpf-profiler/collector/telemetry"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/apmint"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/beam"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/dotnet"
@@ -29,7 +31,6 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/xsync"
-	"go.opentelemetry.io/ebpf-profiler/metrics"
 	"go.opentelemetry.io/ebpf-profiler/nativeunwind"
 	sdtypes "go.opentelemetry.io/ebpf-profiler/nativeunwind/stackdeltatypes"
 	pmebpf "go.opentelemetry.io/ebpf-profiler/processmanager/ebpfapi"
@@ -310,17 +311,21 @@ func (mgr *ExecutableInfoManager) NumInterpreterLoaders() int {
 	return len(state.interpreterLoaders)
 }
 
-// UpdateMetricSummary updates the metrics in the given metric map.
-func (mgr *ExecutableInfoManager) UpdateMetricSummary(summary metrics.Summary) {
+// UpdateMetricSummary records executable info manager metrics to the TelemetryBuilder.
+func (mgr *ExecutableInfoManager) UpdateMetricSummary(ctx context.Context, tb *telemetry.TelemetryBuilder) {
 	state := mgr.state.RLock()
-	summary[metrics.IDNumExeIDLoadedToEBPF] = metrics.MetricValue(len(state.executables))
-	summary[metrics.IDUnwindInfoArraySize] = metrics.MetricValue(len(state.unwindInfoIndex))
-	summary[metrics.IDHashmapNumStackDeltaPages] = metrics.MetricValue(state.numStackDeltaMapPages)
+	tb.AgentNumExeIDLoadedToEbpf.Record(ctx, int64(len(state.executables)))
+	tb.AgentUnwindInfoArraySize.Record(ctx, int64(len(state.unwindInfoIndex)))
+	tb.AgentStackDeltaPagesSize.Record(ctx, int64(state.numStackDeltaMapPages))
 	mgr.state.RUnlock(&state)
 
 	deltaProviderStatistics := mgr.sdp.GetAndResetStatistics()
-	summary[metrics.IDStackDeltaProviderSuccess] = metrics.MetricValue(deltaProviderStatistics.Success)
-	summary[metrics.IDStackDeltaProviderExtractionError] = metrics.MetricValue(deltaProviderStatistics.ExtractionErrors)
+	if v := int64(deltaProviderStatistics.Success); v != 0 {
+		tb.AgentStackDeltaExtractionSuccess.Add(ctx, v)
+	}
+	if v := int64(deltaProviderStatistics.ExtractionErrors); v != 0 {
+		tb.AgentErrorsStackDeltaProviderExtraction.Add(ctx, v)
+	}
 }
 
 type executableInfoManagerState struct {

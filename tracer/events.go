@@ -15,9 +15,9 @@ import (
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/perf"
 
+	"go.opentelemetry.io/ebpf-profiler/collector/telemetry"
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
-	"go.opentelemetry.io/ebpf-profiler/metrics"
 	"go.opentelemetry.io/ebpf-profiler/process"
 	"go.opentelemetry.io/ebpf-profiler/support"
 	"go.opentelemetry.io/ebpf-profiler/times"
@@ -153,7 +153,7 @@ func startPerfEventMonitor(ctx context.Context, perfEventMap *ebpf.Map,
 // error counts.
 func (t *Tracer) startTraceEventMonitor(ctx context.Context,
 	traceOutChan chan<- *libpf.EbpfTrace,
-) (func() []metrics.Metric, error) {
+) (func(context.Context, *telemetry.TelemetryBuilder), error) {
 	eventsMap := t.ebpfMaps["trace_events"]
 	eventReader, err := perf.NewReader(eventsMap,
 		t.samplesPerSecond*support.Sizeof_Trace)
@@ -294,14 +294,21 @@ func (t *Tracer) startTraceEventMonitor(ctx context.Context,
 		}
 	}()
 
-	return func() []metrics.Metric {
+	return func(ctx context.Context, tb *telemetry.TelemetryBuilder) {
+		if tb == nil {
+			return
+		}
 		lost := lostEventsCount.Swap(0)
 		noData := noDataCount.Swap(0)
 		readError := readErrorCount.Swap(0)
-		return []metrics.Metric{
-			{ID: metrics.IDTraceEventLost, Value: metrics.MetricValue(lost)},
-			{ID: metrics.IDTraceEventNoData, Value: metrics.MetricValue(noData)},
-			{ID: metrics.IDTraceEventReadError, Value: metrics.MetricValue(readError)},
+		if lost > 0 {
+			tb.AgentErrorsTraceEventLost.Add(ctx, int64(lost))
+		}
+		if noData > 0 {
+			tb.AgentErrorsTraceEventNoData.Add(ctx, int64(noData))
+		}
+		if readError > 0 {
+			tb.AgentErrorsTraceEventReadError.Add(ctx, int64(readError))
 		}
 	}, nil
 }
@@ -309,7 +316,7 @@ func (t *Tracer) startTraceEventMonitor(ctx context.Context,
 // startEventMonitor spawns a goroutine that receives events from the
 // map report_events. Returns a function that can be called to retrieve
 // perf event array metrics.
-func (t *Tracer) startEventMonitor(ctx context.Context) (func() []metrics.Metric, error) {
+func (t *Tracer) startEventMonitor(ctx context.Context) (func(context.Context, *telemetry.TelemetryBuilder), error) {
 	eventMap, ok := t.ebpfMaps["report_events"]
 	if !ok {
 		return nil, fmt.Errorf("Map report_events is not available")
@@ -319,13 +326,19 @@ func (t *Tracer) startEventMonitor(ctx context.Context) (func() []metrics.Metric
 	if err != nil {
 		return nil, err
 	}
-	return func() []metrics.Metric {
+	return func(ctx context.Context, tb *telemetry.TelemetryBuilder) {
+		if tb == nil {
+			return
+		}
 		lost, noData, readError := getPerfErrorCounts()
-
-		return []metrics.Metric{
-			{ID: metrics.IDPerfEventLost, Value: metrics.MetricValue(lost)},
-			{ID: metrics.IDPerfEventNoData, Value: metrics.MetricValue(noData)},
-			{ID: metrics.IDPerfEventReadError, Value: metrics.MetricValue(readError)},
+		if lost > 0 {
+			tb.AgentErrorsPerfEventLost.Add(ctx, int64(lost))
+		}
+		if noData > 0 {
+			tb.AgentErrorsPerfEventNoData.Add(ctx, int64(noData))
+		}
+		if readError > 0 {
+			tb.AgentErrorsPerfEventReadError.Add(ctx, int64(readError))
 		}
 	}, nil
 }

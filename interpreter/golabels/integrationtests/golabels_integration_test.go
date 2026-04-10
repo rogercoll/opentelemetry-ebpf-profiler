@@ -21,10 +21,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
-	"go.opentelemetry.io/ebpf-profiler/metrics"
 	"go.opentelemetry.io/ebpf-profiler/tracer"
 	tracertypes "go.opentelemetry.io/ebpf-profiler/tracer/types"
-	"go.opentelemetry.io/otel/metric/noop"
 )
 
 var (
@@ -93,7 +91,6 @@ func Test_Golabels(t *testing.T) {
 			defer cancel()
 
 			debug.SetTraceback("all")
-			metrics.Start(noop.Meter{})
 
 			enabledTracers, _ := tracertypes.Parse("")
 			enabledTracers.Enable(tracertypes.Labels)

@@ -4,6 +4,7 @@
 package hotspot // import "go.opentelemetry.io/ebpf-profiler/interpreter/hotspot"
 
 import (
+	"context"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -23,7 +24,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
 	"go.opentelemetry.io/ebpf-profiler/libpf/xsync"
 	"go.opentelemetry.io/ebpf-profiler/lpm"
-	"go.opentelemetry.io/ebpf-profiler/metrics"
+	"go.opentelemetry.io/ebpf-profiler/collector/telemetry"
 	npsr "go.opentelemetry.io/ebpf-profiler/nopanicslicereader"
 	"go.opentelemetry.io/ebpf-profiler/process"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
@@ -95,86 +96,32 @@ type hotspotInstance struct {
 	stubs xsync.RWMutex[map[libpf.Address]StubRoutine]
 }
 
-func (d *hotspotInstance) GetAndResetMetrics() ([]metrics.Metric, error) {
+func (d *hotspotInstance) GetAndResetMetrics(ctx context.Context, tb *telemetry.TelemetryBuilder) error {
 	addrToSymbolStats := d.addrToSymbol.ResetMetrics()
 	addrToMethodStats := d.addrToMethod.ResetMetrics()
 	addrToJITInfoStats := d.addrToJITInfo.ResetMetrics()
 	addrToStubNameStats := d.addrToStubName.ResetMetrics()
 
-	return []metrics.Metric{
-		{
-			ID:    metrics.IDHotspotSymbolizationSuccesses,
-			Value: metrics.MetricValue(d.successCount.Swap(0)),
-		},
-		{
-			ID:    metrics.IDHotspotSymbolizationFailures,
-			Value: metrics.MetricValue(d.failCount.Swap(0)),
-		},
-		{
-			ID:    metrics.IDHotspotAddrToSymbolHit,
-			Value: metrics.MetricValue(addrToSymbolStats.Hits),
-		},
-		{
-			ID:    metrics.IDHotspotAddrToSymbolMiss,
-			Value: metrics.MetricValue(addrToSymbolStats.Misses),
-		},
-		{
-			ID:    metrics.IDHotspotAddrToSymbolAdd,
-			Value: metrics.MetricValue(addrToSymbolStats.Inserts),
-		},
-		{
-			ID:    metrics.IDHotspotAddrToSymbolDel,
-			Value: metrics.MetricValue(addrToSymbolStats.Removals),
-		},
-		{
-			ID:    metrics.IDHotspotAddrToMethodHit,
-			Value: metrics.MetricValue(addrToMethodStats.Hits),
-		},
-		{
-			ID:    metrics.IDHotspotAddrToMethodMiss,
-			Value: metrics.MetricValue(addrToMethodStats.Misses),
-		},
-		{
-			ID:    metrics.IDHotspotAddrToMethodAdd,
-			Value: metrics.MetricValue(addrToMethodStats.Inserts),
-		},
-		{
-			ID:    metrics.IDHotspotAddrToMethodDel,
-			Value: metrics.MetricValue(addrToMethodStats.Removals),
-		},
-		{
-			ID:    metrics.IDHotspotAddrToJITInfoHit,
-			Value: metrics.MetricValue(addrToJITInfoStats.Hits),
-		},
-		{
-			ID:    metrics.IDHotspotAddrToJITInfoMiss,
-			Value: metrics.MetricValue(addrToJITInfoStats.Misses),
-		},
-		{
-			ID:    metrics.IDHotspotAddrToJITInfoAdd,
-			Value: metrics.MetricValue(addrToJITInfoStats.Inserts),
-		},
-		{
-			ID:    metrics.IDHotspotAddrToJITInfoDel,
-			Value: metrics.MetricValue(addrToJITInfoStats.Removals),
-		},
-		{
-			ID:    metrics.IDHotspotAddrToStubNameIDHit,
-			Value: metrics.MetricValue(addrToStubNameStats.Hits),
-		},
-		{
-			ID:    metrics.IDHotspotAddrToStubNameIDMiss,
-			Value: metrics.MetricValue(addrToStubNameStats.Misses),
-		},
-		{
-			ID:    metrics.IDHotspotAddrToStubNameIDAdd,
-			Value: metrics.MetricValue(addrToStubNameStats.Inserts),
-		},
-		{
-			ID:    metrics.IDHotspotAddrToStubNameIDDel,
-			Value: metrics.MetricValue(addrToStubNameStats.Removals),
-		},
-	}, nil
+	tb.AgentHotspotSymbolizationSuccesses.Add(ctx, int64(d.successCount.Swap(0)))
+	tb.AgentHotspotSymbolizationFailures.Add(ctx, int64(d.failCount.Swap(0)))
+	tb.AgentHotspotAddrToSymbolHits.Add(ctx, int64(addrToSymbolStats.Hits))
+	tb.AgentHotspotAddrToSymbolMisses.Add(ctx, int64(addrToSymbolStats.Misses))
+	tb.AgentHotspotAddrToSymbolAdd.Add(ctx, int64(addrToSymbolStats.Inserts))
+	tb.AgentHotspotAddrToSymbolDel.Add(ctx, int64(addrToSymbolStats.Removals))
+	tb.AgentHotspotAddrToMethodHits.Add(ctx, int64(addrToMethodStats.Hits))
+	tb.AgentHotspotAddrToMethodMisses.Add(ctx, int64(addrToMethodStats.Misses))
+	tb.AgentHotspotAddrToMethodAdd.Add(ctx, int64(addrToMethodStats.Inserts))
+	tb.AgentHotspotAddrToMethodDel.Add(ctx, int64(addrToMethodStats.Removals))
+	tb.AgentHotspotAddrToJitInfoHits.Add(ctx, int64(addrToJITInfoStats.Hits))
+	tb.AgentHotspotAddrToJitInfoMisses.Add(ctx, int64(addrToJITInfoStats.Misses))
+	tb.AgentHotspotAddrToJitInfoAdd.Add(ctx, int64(addrToJITInfoStats.Inserts))
+	tb.AgentHotspotAddrToJitInfoDel.Add(ctx, int64(addrToJITInfoStats.Removals))
+	tb.AgentHotspotAddrToStubNameIDHits.Add(ctx, int64(addrToStubNameStats.Hits))
+	tb.AgentHotspotAddrToStubNameIDMisses.Add(ctx, int64(addrToStubNameStats.Misses))
+	tb.AgentHotspotAddrToStubNameAdd.Add(ctx, int64(addrToStubNameStats.Inserts))
+	tb.AgentHotspotAddrToStubNameDel.Add(ctx, int64(addrToStubNameStats.Removals))
+
+	return nil
 }
 
 // getSymbol extracts a class Symbol value from the given address in the target JVM process

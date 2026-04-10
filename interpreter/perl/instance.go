@@ -4,6 +4,7 @@
 package perl // import "go.opentelemetry.io/ebpf-profiler/interpreter/perl"
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"sync/atomic"
@@ -17,7 +18,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libc"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
-	"go.opentelemetry.io/ebpf-profiler/metrics"
+	"go.opentelemetry.io/ebpf-profiler/collector/telemetry"
 	npsr "go.opentelemetry.io/ebpf-profiler/nopanicslicereader"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
 	"go.opentelemetry.io/ebpf-profiler/successfailurecounter"
@@ -138,73 +139,28 @@ func (i *perlInstance) Detach(ebpf interpreter.EbpfHandler, pid libpf.PID) error
 	return ebpf.DeleteProcData(libpf.Perl, pid)
 }
 
-func (i *perlInstance) GetAndResetMetrics() ([]metrics.Metric, error) {
+func (i *perlInstance) GetAndResetMetrics(ctx context.Context, tb *telemetry.TelemetryBuilder) error {
 	addrToHEKStats := i.addrToHEK.ResetMetrics()
 	addrToCOPStats := i.addrToCOP.ResetMetrics()
 	addrToGVStats := i.addrToGV.ResetMetrics()
 
-	return []metrics.Metric{
-		{
-			ID:    metrics.IDPerlSymbolizationSuccess,
-			Value: metrics.MetricValue(i.successCount.Swap(0)),
-		},
-		{
-			ID:    metrics.IDPerlSymbolizationFailure,
-			Value: metrics.MetricValue(i.failCount.Swap(0)),
-		},
-		{
-			ID:    metrics.IDPerlAddrToHEKHit,
-			Value: metrics.MetricValue(addrToHEKStats.Hits),
-		},
-		{
-			ID:    metrics.IDPerlAddrToHEKMiss,
-			Value: metrics.MetricValue(addrToHEKStats.Misses),
-		},
-		{
-			ID:    metrics.IDPerlAddrToHEKAdd,
-			Value: metrics.MetricValue(addrToHEKStats.Inserts),
-		},
-		{
-			ID:    metrics.IDPerlAddrToHEKDel,
-			Value: metrics.MetricValue(addrToHEKStats.Removals),
-		},
-		{
-			ID:    metrics.IDPerlAddrToCOPHit,
-			Value: metrics.MetricValue(addrToCOPStats.Hits),
-		},
-		{
-			ID:    metrics.IDPerlAddrToCOPMiss,
-			Value: metrics.MetricValue(addrToCOPStats.Misses),
-		},
-		{
-			ID:    metrics.IDPerlAddrToCOPAdd,
-			Value: metrics.MetricValue(addrToCOPStats.Inserts),
-		},
-		{
-			ID:    metrics.IDPerlAddrToCOPDel,
-			Value: metrics.MetricValue(addrToCOPStats.Removals),
-		},
-		{
-			ID:    metrics.IDPerlAddrToGVHit,
-			Value: metrics.MetricValue(addrToGVStats.Hits),
-		},
-		{
-			ID:    metrics.IDPerlAddrToGVMiss,
-			Value: metrics.MetricValue(addrToGVStats.Misses),
-		},
-		{
-			ID:    metrics.IDPerlAddrToGVAdd,
-			Value: metrics.MetricValue(addrToGVStats.Inserts),
-		},
-		{
-			ID:    metrics.IDPerlAddrToGVDel,
-			Value: metrics.MetricValue(addrToGVStats.Removals),
-		},
-		{
-			ID:    metrics.IDPerlHekLen,
-			Value: metrics.MetricValue(i.hekLen.Swap(0)),
-		},
-	}, nil
+	tb.AgentPerlSymbolizationSuccesses.Add(ctx, int64(i.successCount.Swap(0)))
+	tb.AgentPerlSymbolizationFailures.Add(ctx, int64(i.failCount.Swap(0)))
+	tb.AgentPerlAddrToHekHits.Add(ctx, int64(addrToHEKStats.Hits))
+	tb.AgentPerlAddrToHekMisses.Add(ctx, int64(addrToHEKStats.Misses))
+	tb.AgentPerlAddrToHekAdd.Add(ctx, int64(addrToHEKStats.Inserts))
+	tb.AgentPerlAddrToHekDel.Add(ctx, int64(addrToHEKStats.Removals))
+	tb.AgentPerlAddrToCopHits.Add(ctx, int64(addrToCOPStats.Hits))
+	tb.AgentPerlAddrToCopMisses.Add(ctx, int64(addrToCOPStats.Misses))
+	tb.AgentPerlAddrToCopAdd.Add(ctx, int64(addrToCOPStats.Inserts))
+	tb.AgentPerlAddrToCopDel.Add(ctx, int64(addrToCOPStats.Removals))
+	tb.AgentPerlAddrToGvHits.Add(ctx, int64(addrToGVStats.Hits))
+	tb.AgentPerlAddrToGvMisses.Add(ctx, int64(addrToGVStats.Misses))
+	tb.AgentPerlAddrToGvAdd.Add(ctx, int64(addrToGVStats.Inserts))
+	tb.AgentPerlAddrToGvDel.Add(ctx, int64(addrToGVStats.Removals))
+	tb.AgentPerlHekLen.Record(ctx, int64(i.hekLen.Swap(0)))
+
+	return nil
 }
 
 func (i *perlInstance) getHEK(addr libpf.Address) (libpf.String, error) {

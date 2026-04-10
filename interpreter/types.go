@@ -4,14 +4,15 @@
 package interpreter // import "go.opentelemetry.io/ebpf-profiler/interpreter"
 
 import (
+	"context"
 	"errors"
 	"unsafe"
 
+	"go.opentelemetry.io/ebpf-profiler/collector/telemetry"
 	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/libc"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/lpm"
-	"go.opentelemetry.io/ebpf-profiler/metrics"
 	"go.opentelemetry.io/ebpf-profiler/process"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
@@ -162,9 +163,9 @@ type Instance interface {
 	// The resulting libpf.Frame values are appended to frames.
 	Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames, mapping libpf.FrameMapping) error
 
-	// GetAndResetMetrics collects the metrics from the Instance and resets
-	// the counters to their initial value.
-	GetAndResetMetrics() ([]metrics.Metric, error)
+	// GetAndResetMetrics collects the metrics from the Instance, records
+	// them to the TelemetryBuilder, and resets the counters.
+	GetAndResetMetrics(context.Context, *telemetry.TelemetryBuilder) error
 
 	// Release resources that are used to symbolize a stack.
 	ReleaseResources() error

@@ -4,6 +4,7 @@
 package php // import "go.opentelemetry.io/ebpf-profiler/interpreter/php"
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"sync/atomic"
@@ -14,7 +15,7 @@ import (
 
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
-	"go.opentelemetry.io/ebpf-profiler/metrics"
+	"go.opentelemetry.io/ebpf-profiler/collector/telemetry"
 	npsr "go.opentelemetry.io/ebpf-profiler/nopanicslicereader"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
 	"go.opentelemetry.io/ebpf-profiler/successfailurecounter"
@@ -66,39 +67,18 @@ func (i *phpInstance) Detach(ebpf interpreter.EbpfHandler, pid libpf.PID) error 
 	return ebpf.DeleteProcData(libpf.PHP, pid)
 }
 
-func (i *phpInstance) GetAndResetMetrics() ([]metrics.Metric, error) {
+func (i *phpInstance) GetAndResetMetrics(ctx context.Context, tb *telemetry.TelemetryBuilder) error {
 	addrToFuncStats := i.addrToFunction.ResetMetrics()
 
-	return []metrics.Metric{
-		{
-			ID:    metrics.IDPHPSymbolizationSuccess,
-			Value: metrics.MetricValue(i.successCount.Swap(0)),
-		},
-		{
-			ID:    metrics.IDPHPSymbolizationFailure,
-			Value: metrics.MetricValue(i.failCount.Swap(0)),
-		},
-		{
-			ID:    metrics.IDPHPAddrToFuncHit,
-			Value: metrics.MetricValue(addrToFuncStats.Hits),
-		},
-		{
-			ID:    metrics.IDPHPAddrToFuncMiss,
-			Value: metrics.MetricValue(addrToFuncStats.Misses),
-		},
-		{
-			ID:    metrics.IDPHPAddrToFuncAdd,
-			Value: metrics.MetricValue(addrToFuncStats.Inserts),
-		},
-		{
-			ID:    metrics.IDPHPAddrToFuncDel,
-			Value: metrics.MetricValue(addrToFuncStats.Removals),
-		},
-		{
-			ID:    metrics.IDPHPFailedToFindReturnAddress,
-			Value: metrics.MetricValue(i.vmRTCount.Swap(0)),
-		},
-	}, nil
+	tb.AgentPhpSymbolizationSuccesses.Add(ctx, int64(i.successCount.Swap(0)))
+	tb.AgentPhpSymbolizationFailures.Add(ctx, int64(i.failCount.Swap(0)))
+	tb.AgentPhpAddrToFuncHits.Add(ctx, int64(addrToFuncStats.Hits))
+	tb.AgentPhpAddrToFuncMisses.Add(ctx, int64(addrToFuncStats.Misses))
+	tb.AgentPhpAddrToFuncAdd.Add(ctx, int64(addrToFuncStats.Inserts))
+	tb.AgentPhpAddrToFuncDel.Add(ctx, int64(addrToFuncStats.Removals))
+	tb.AgentPhpErrorsFailedToFindReturnAddress.Add(ctx, int64(i.vmRTCount.Swap(0)))
+
+	return nil
 }
 
 func (i *phpInstance) getFunction(addr libpf.Address, typeInfo uint32) (*phpFunction, error) {

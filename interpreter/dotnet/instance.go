@@ -4,6 +4,7 @@
 package dotnet // import "go.opentelemetry.io/ebpf-profiler/interpreter/dotnet"
 
 import (
+	"context"
 	"fmt"
 	"slices"
 	"strings"
@@ -18,7 +19,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/lpm"
-	"go.opentelemetry.io/ebpf-profiler/metrics"
+	"go.opentelemetry.io/ebpf-profiler/collector/telemetry"
 	npsr "go.opentelemetry.io/ebpf-profiler/nopanicslicereader"
 	"go.opentelemetry.io/ebpf-profiler/process"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
@@ -700,27 +701,15 @@ func (i *dotnetInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
 	return nil
 }
 
-func (i *dotnetInstance) GetAndResetMetrics() ([]metrics.Metric, error) {
+func (i *dotnetInstance) GetAndResetMetrics(ctx context.Context, tb *telemetry.TelemetryBuilder) error {
 	addrToMethodStats := i.addrToMethod.ResetMetrics()
 
-	return []metrics.Metric{
-		{
-			ID:    metrics.IDDotnetSymbolizationSuccesses,
-			Value: metrics.MetricValue(i.successCount.Swap(0)),
-		},
-		{
-			ID:    metrics.IDDotnetSymbolizationFailures,
-			Value: metrics.MetricValue(i.failCount.Swap(0)),
-		},
-		{
-			ID:    metrics.IDDotnetAddrToMethodHit,
-			Value: metrics.MetricValue(addrToMethodStats.Hits),
-		},
-		{
-			ID:    metrics.IDDotnetAddrToMethodMiss,
-			Value: metrics.MetricValue(addrToMethodStats.Misses),
-		},
-	}, nil
+	tb.AgentDotnetSymbolizationSuccesses.Add(ctx, int64(i.successCount.Swap(0)))
+	tb.AgentDotnetSymbolizationFailures.Add(ctx, int64(i.failCount.Swap(0)))
+	tb.AgentDotnetAddrToMethodHits.Add(ctx, int64(addrToMethodStats.Hits))
+	tb.AgentDotnetAddrToMethodMisses.Add(ctx, int64(addrToMethodStats.Misses))
+
+	return nil
 }
 
 func (i *dotnetInstance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames, _ libpf.FrameMapping) error {

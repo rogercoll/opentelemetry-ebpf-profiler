@@ -4,9 +4,11 @@
 package interpreter // import "go.opentelemetry.io/ebpf-profiler/interpreter"
 
 import (
+	"context"
+
+	"go.opentelemetry.io/ebpf-profiler/collector/telemetry"
 	"go.opentelemetry.io/ebpf-profiler/libc"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
-	"go.opentelemetry.io/ebpf-profiler/metrics"
 	"go.opentelemetry.io/ebpf-profiler/process"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
 )
@@ -29,8 +31,8 @@ func (is *InstanceStubs) Symbolize(libpf.EbpfFrame, *libpf.Frames, libpf.FrameMa
 	return ErrMismatchInterpreterType
 }
 
-func (is *InstanceStubs) GetAndResetMetrics() ([]metrics.Metric, error) {
-	return []metrics.Metric{}, nil
+func (is *InstanceStubs) GetAndResetMetrics(context.Context, *telemetry.TelemetryBuilder) error {
+	return nil
 }
 
 func (is *InstanceStubs) ReleaseResources() error {

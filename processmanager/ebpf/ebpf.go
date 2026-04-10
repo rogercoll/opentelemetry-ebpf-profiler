@@ -10,10 +10,12 @@ import (
 	"math/bits"
 	"reflect"
 	"sync"
+	"sync/atomic"
 	"unsafe"
 
 	cebpf "github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/features"
+	"go.opentelemetry.io/ebpf-profiler/collector/telemetry"
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 	"go.opentelemetry.io/ebpf-profiler/tracer/types"
 	"golang.org/x/exp/constraints"
@@ -23,7 +25,6 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
 	"go.opentelemetry.io/ebpf-profiler/lpm"
-	"go.opentelemetry.io/ebpf-profiler/metrics"
 	sdtypes "go.opentelemetry.io/ebpf-profiler/nativeunwind/stackdeltatypes"
 	"go.opentelemetry.io/ebpf-profiler/processmanager/ebpfapi"
 	"go.opentelemetry.io/ebpf-profiler/rlimit"
@@ -63,8 +64,13 @@ type ebpfMapsImpl struct {
 	// Template used to update the inner maps of ExeIDToStackDeltaMaps
 	stackdeltaInnerMapTemplate *cebpf.MapSpec
 
-	errCounterLock sync.Mutex
-	errCounter     map[metrics.MetricID]int64
+	errUnwindInfoArrayUpdate           atomic.Int64
+	errExeIDToStackDeltasBatchUpdate   atomic.Int64
+	errStackDeltaPageToInfoBatchUpdate atomic.Int64
+	errStackDeltaPageToInfoDelete      atomic.Int64
+	errPidPageToMappingInfoUpdate      atomic.Int64
+	errPidPageToMappingInfoDelete      atomic.Int64
+	errPidPageToMappingInfoBatchDelete atomic.Int64
 
 	// Support for batch operations on LPM eBPF maps was only
 	// introduced with Linux kernel 5.13.
@@ -86,7 +92,6 @@ func LoadMaps(ctx context.Context, includeTracers types.IncludedTracers,
 	impl := &ebpfMapsImpl{
 		stackdeltaInnerMapTemplate: stackdeltaInnerMapSpec,
 	}
-	impl.errCounter = make(map[metrics.MetricID]int64)
 
 	implRefVal := reflect.ValueOf(impl).Elem()
 	implRefType := reflect.TypeFor[ebpfMapsImpl]()
@@ -256,33 +261,37 @@ func (impl *ebpfMapsImpl) DeletePidInterpreterMapping(pid libpf.PID, prefix lpm.
 	return impl.PidPageToMappingInfo.Delete(unsafe.Pointer(&cKey))
 }
 
-// trackMapError is a wrapper to report issues with changes to eBPF maps.
-func (impl *ebpfMapsImpl) trackMapError(id metrics.MetricID, err error) error {
+// trackMapError atomically increments the given counter when err is non-nil.
+func trackMapError(counter *atomic.Int64, err error) error {
 	if err != nil {
-		impl.errCounterLock.Lock()
-		impl.errCounter[id]++
-		impl.errCounterLock.Unlock()
+		counter.Add(1)
 	}
 	return err
 }
 
-// CollectMetrics returns gathered errors for changes to eBPF maps.
-func (impl *ebpfMapsImpl) CollectMetrics() []metrics.Metric {
-	impl.errCounterLock.Lock()
-	defer impl.errCounterLock.Unlock()
-
-	counts := make([]metrics.Metric, 0, 7)
-	for id, value := range impl.errCounter {
-		counts = append(counts, metrics.Metric{
-			ID:    id,
-			Value: metrics.MetricValue(value),
-		})
-		// As we don't want to report metrics with zero values on the next call,
-		// we delete the entries from the map instead of just resetting them.
-		delete(impl.errCounter, id)
+// CollectMetrics records gathered eBPF map errors into the TelemetryBuilder.
+func (impl *ebpfMapsImpl) CollectMetrics(ctx context.Context, tb *telemetry.TelemetryBuilder) {
+	if v := impl.errUnwindInfoArrayUpdate.Swap(0); v != 0 {
+		tb.AgentErrorsUnwindInfoArrayUpdate.Add(ctx, v)
 	}
-
-	return counts
+	if v := impl.errExeIDToStackDeltasBatchUpdate.Swap(0); v != 0 {
+		tb.AgentErrorsExeIDToStackDeltasBatchUpdate.Add(ctx, v)
+	}
+	if v := impl.errStackDeltaPageToInfoBatchUpdate.Swap(0); v != 0 {
+		tb.AgentErrorsStackDeltaPageToInfoBatchUpdate.Add(ctx, v)
+	}
+	if v := impl.errStackDeltaPageToInfoDelete.Swap(0); v != 0 {
+		tb.AgentErrorsStackDeltaPageToInfoDelete.Add(ctx, v)
+	}
+	if v := impl.errPidPageToMappingInfoUpdate.Swap(0); v != 0 {
+		tb.AgentErrorsPidPageToMappingInfoUpdate.Add(ctx, v)
+	}
+	if v := impl.errPidPageToMappingInfoDelete.Swap(0); v != 0 {
+		tb.AgentErrorsPidPageToMappingInfoDelete.Add(ctx, v)
+	}
+	if v := impl.errPidPageToMappingInfoBatchDelete.Swap(0); v != 0 {
+		tb.AgentErrorsPidPageToMappingInfoBatchDelete.Add(ctx, v)
+	}
 }
 
 // poolPIDPage caches reusable heap-allocated PIDPage instances
@@ -481,7 +490,7 @@ func (impl *ebpfMapsImpl) UpdateUnwindInfo(index uint16, value sdtypes.UnwindInf
 			index, impl.UnwindInfoArray.MaxEntries())
 	}
 	key := uint32(index)
-	return impl.trackMapError(metrics.IDUnwindInfoArrayUpdate,
+	return trackMapError(&impl.errUnwindInfoArrayUpdate,
 		impl.UnwindInfoArray.Update(unsafe.Pointer(&key), unsafe.Pointer(&value),
 			cebpf.UpdateAny))
 }
@@ -549,7 +558,7 @@ func (impl *ebpfMapsImpl) UpdateExeIDToStackDeltas(fileID host.FileID,
 		ptrCastMarshaler[support.StackDelta](stackDeltas),
 		&cebpf.BatchOptions{Flags: uint64(cebpf.UpdateAny)})
 	if err != nil {
-		return 0, impl.trackMapError(metrics.IDExeIDToStackDeltasBatchUpdate,
+		return 0, trackMapError(&impl.errExeIDToStackDeltasBatchUpdate,
 			fmt.Errorf("failed to batch insert %d elements for 0x%x "+
 				"into exeIDTostack_deltas: %v",
 				numDeltas, fileID, err))
@@ -599,7 +608,7 @@ func (impl *ebpfMapsImpl) UpdateStackDeltaPages(fileID host.FileID, numDeltasPer
 		ptrCastMarshaler[support.StackDeltaPageKey](keys),
 		ptrCastMarshaler[support.StackDeltaPageInfo](values),
 		&cebpf.BatchOptions{Flags: uint64(cebpf.UpdateNoExist)})
-	return impl.trackMapError(metrics.IDStackDeltaPageToInfoBatchUpdate, err)
+	return trackMapError(&impl.errStackDeltaPageToInfoBatchUpdate, err)
 
 }
 
@@ -609,7 +618,7 @@ func (impl *ebpfMapsImpl) DeleteStackDeltaPage(fileID host.FileID, page uint64) 
 		FileID: uint64(fileID),
 		Page:   page,
 	}
-	return impl.trackMapError(metrics.IDStackDeltaPageToInfoDelete,
+	return trackMapError(&impl.errStackDeltaPageToInfoDelete,
 		impl.StackDeltaPageToInfo.Delete(unsafe.Pointer(&key)))
 }
 
@@ -633,7 +642,7 @@ func (impl *ebpfMapsImpl) UpdatePidPageMappingInfo(pid libpf.PID, prefix lpm.Pre
 	cValue := getPIDPageMappingInfo(fileID, biasAndUnwindProgram)
 	defer poolPIDPageMappingInfo.Put(cValue)
 
-	return impl.trackMapError(metrics.IDPidPageToMappingInfoUpdate,
+	return trackMapError(&impl.errPidPageToMappingInfoUpdate,
 		impl.PidPageToMappingInfo.Update(unsafe.Pointer(cKey), unsafe.Pointer(cValue),
 			cebpf.UpdateNoExist))
 }
@@ -665,7 +674,7 @@ func (impl *ebpfMapsImpl) DeletePidPageMappingInfoSingle(pid libpf.PID, prefixes
 	for _, prefix := range prefixes {
 		*cKey = getPIDPageFromPrefix(pid, prefix)
 		if err := impl.PidPageToMappingInfo.Delete(unsafe.Pointer(cKey)); err != nil {
-			_ = impl.trackMapError(metrics.IDPidPageToMappingInfoDelete, err)
+			_ = trackMapError(&impl.errPidPageToMappingInfoDelete, err)
 			combinedErrors = errors.Join(combinedErrors, err)
 			continue
 		}
@@ -685,7 +694,7 @@ func (impl *ebpfMapsImpl) DeletePidPageMappingInfoBatch(pid libpf.PID, prefixes 
 
 	deleted, err := impl.PidPageToMappingInfo.BatchDelete(
 		ptrCastMarshaler[support.PIDPage](cKeys), nil)
-	return deleted, impl.trackMapError(metrics.IDPidPageToMappingInfoBatchDelete, err)
+	return deleted, trackMapError(&impl.errPidPageToMappingInfoBatchDelete, err)
 }
 
 // LookupPidPageInformation returns the fileID and bias for a given pid and page combination from

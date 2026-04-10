@@ -4,13 +4,14 @@
 package golang // import "go.opentelemetry.io/ebpf-profiler/interpreter/go"
 
 import (
+	"context"
 	"fmt"
 	"sync/atomic"
 
+	"go.opentelemetry.io/ebpf-profiler/collector/telemetry"
 	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
-	"go.opentelemetry.io/ebpf-profiler/metrics"
 	"go.opentelemetry.io/ebpf-profiler/nativeunwind/elfunwindinfo"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
 	"go.opentelemetry.io/ebpf-profiler/successfailurecounter"
@@ -86,17 +87,11 @@ func (g *goData) Unload(_ interpreter.EbpfHandler) {
 	g.unref()
 }
 
-func (g *goInstance) GetAndResetMetrics() ([]metrics.Metric, error) {
-	return []metrics.Metric{
-		{
-			ID:    metrics.IDGoSymbolizationSuccess,
-			Value: metrics.MetricValue(g.successCount.Swap(0)),
-		},
-		{
-			ID:    metrics.IDGoSymbolizationFailure,
-			Value: metrics.MetricValue(g.failCount.Swap(0)),
-		},
-	}, nil
+func (g *goInstance) GetAndResetMetrics(ctx context.Context, tb *telemetry.TelemetryBuilder) error {
+	tb.AgentGoSymbolizationSuccesses.Add(ctx, int64(g.successCount.Swap(0)))
+	tb.AgentGoSymbolizationFailures.Add(ctx, int64(g.failCount.Swap(0)))
+
+	return nil
 }
 
 func (g *goInstance) Detach(_ interpreter.EbpfHandler, _ libpf.PID) error {

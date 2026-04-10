@@ -4,13 +4,14 @@
 package ebpfapi // import "go.opentelemetry.io/ebpf-profiler/processmanager/ebpfapi"
 
 import (
+	"context"
 	"fmt"
 
+	"go.opentelemetry.io/ebpf-profiler/collector/telemetry"
 	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/lpm"
-	"go.opentelemetry.io/ebpf-profiler/metrics"
 	"go.opentelemetry.io/ebpf-profiler/nativeunwind/stackdeltatypes"
 	"go.opentelemetry.io/ebpf-profiler/support"
 	"go.opentelemetry.io/ebpf-profiler/util"
@@ -53,8 +54,8 @@ type EbpfHandler interface {
 	// pid_page_to_mapping_info and returns the number of elements removed.
 	DeletePidPageMappingInfo(pid libpf.PID, prefixes []lpm.Prefix) (int, error)
 
-	// CollectMetrics returns gathered errors for changes to eBPF maps.
-	CollectMetrics() []metrics.Metric
+	// CollectMetrics records gathered errors for changes to eBPF maps.
+	CollectMetrics(context.Context, *telemetry.TelemetryBuilder)
 
 	// SupportsLPMTrieBatchOperations returns true if the kernel supports eBPF batch operations
 	// on LPM trie maps.

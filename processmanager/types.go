@@ -9,11 +9,11 @@ import (
 
 	lru "github.com/elastic/go-freelru"
 
+	"go.opentelemetry.io/ebpf-profiler/collector/telemetry"
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
 	"go.opentelemetry.io/ebpf-profiler/libc"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
-	"go.opentelemetry.io/ebpf-profiler/metrics"
 	"go.opentelemetry.io/ebpf-profiler/process"
 	pmebpf "go.opentelemetry.io/ebpf-profiler/processmanager/ebpfapi"
 	eim "go.opentelemetry.io/ebpf-profiler/processmanager/execinfomanager"
@@ -101,8 +101,8 @@ type ProcessManager struct {
 	// exeReporter is the interface to report executables
 	exeReporter reporter.ExecutableReporter
 
-	// Reporting function which is used to report information to our backend.
-	metricsAddSlice func([]metrics.Metric)
+	// tb is the telemetry builder used to record metrics.
+	tb *telemetry.TelemetryBuilder
 
 	// pidPageToMappingInfoSize reflects the current size of the eBPF hash map
 	// pid_page_to_mapping_info.

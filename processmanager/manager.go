@@ -13,6 +13,7 @@ import (
 	"time"
 
 	lru "github.com/elastic/go-freelru"
+	"go.opentelemetry.io/ebpf-profiler/collector/telemetry"
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 
 	"go.opentelemetry.io/ebpf-profiler/host"
@@ -21,7 +22,6 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
 	"go.opentelemetry.io/ebpf-profiler/lpm"
-	"go.opentelemetry.io/ebpf-profiler/metrics"
 	"go.opentelemetry.io/ebpf-profiler/nativeunwind"
 	"go.opentelemetry.io/ebpf-profiler/periodiccaller"
 	pmebpf "go.opentelemetry.io/ebpf-profiler/processmanager/ebpfapi"
@@ -62,7 +62,8 @@ var (
 func New(ctx context.Context, includeTracers types.IncludedTracers, monitorInterval time.Duration,
 	executableUnloadDelay time.Duration, ebpf pmebpf.EbpfHandler, traceReporter reporter.TraceReporter,
 	exeReporter reporter.ExecutableReporter, sdp nativeunwind.StackDeltaProvider,
-	filterErrorFrames bool, includeEnvVars libpf.Set[string]) (*ProcessManager, error) {
+	filterErrorFrames bool, includeEnvVars libpf.Set[string],
+	tb *telemetry.TelemetryBuilder) (*ProcessManager, error) {
 	if exeReporter == nil {
 		exeReporter = executableReporterStub{}
 	}
@@ -105,7 +106,7 @@ func New(ctx context.Context, includeTracers types.IncludedTracers, monitorInter
 		frameCache:               frameCache,
 		traceReporter:            traceReporter,
 		exeReporter:              exeReporter,
-		metricsAddSlice:          metrics.AddSlice,
+		tb:                       tb,
 		filterErrorFrames:        filterErrorFrames,
 		includeEnvVars:           includeEnvVars,
 	}
@@ -115,72 +116,66 @@ func New(ctx context.Context, includeTracers types.IncludedTracers, monitorInter
 	return pm, nil
 }
 
-// metricSummaryToSlice creates a metrics.Metric slice from a map of metric IDs to values.
-func metricSummaryToSlice(summary metrics.Summary) []metrics.Metric {
-	result := make([]metrics.Metric, 0, len(summary))
-	for mID, mVal := range summary {
-		result = append(result, metrics.Metric{ID: mID, Value: mVal})
-	}
-	return result
-}
-
-// updateMetricSummary gets the metrics from the provided interpreter instance and updates the
-// provided summary by aggregating the new metrics into the summary.
-// The caller is responsible to hold the lock on the interpreter.Instance to avoid race conditions.
-func updateMetricSummary(ii interpreter.Instance, summary metrics.Summary) error {
-	instanceMetrics, err := ii.GetAndResetMetrics()
-	// Update metrics even if there was an error, because it's possible ii is a MultiInstance
-	// and some of the instances may have returned metrics.
-	for _, metric := range instanceMetrics {
-		summary[metric.ID] += metric.Value
-	}
-
-	return err
-}
-
 // collectInterpreterMetrics starts a goroutine that periodically fetches and reports interpreter
 // metrics.
 func collectInterpreterMetrics(ctx context.Context, pm *ProcessManager,
 	monitorInterval time.Duration,
 ) {
 	periodiccaller.Start(ctx, monitorInterval, func() {
+		tb := pm.tb
+		if tb == nil {
+			return
+		}
+
 		pm.mu.RLock()
-		defer pm.mu.RUnlock()
-
-		summary := make(map[metrics.MetricID]metrics.MetricValue)
-
 		for pid := range pm.interpreters {
 			for addr, ii := range pm.interpreters[pid] {
-				if err := updateMetricSummary(ii, summary); err != nil {
+				if err := ii.GetAndResetMetrics(ctx, tb); err != nil {
 					log.Errorf("Failed to get/reset metrics for PID %d at 0x%x: %v",
 						pid, addr, err)
 				}
 			}
 		}
+		pm.mu.RUnlock()
 
-		summary[metrics.IDHashmapPidPageToMappingInfo] = metrics.MetricValue(pm.pidPageToMappingInfoSize)
+		tb.AgentHashmapPidPageToMappingInfoSize.Record(ctx, int64(pm.pidPageToMappingInfoSize))
 
-		summary[metrics.IDELFInfoCacheHit] = metrics.MetricValue(pm.elfInfoCacheHit.Swap(0))
-		summary[metrics.IDELFInfoCacheMiss] = metrics.MetricValue(pm.elfInfoCacheMiss.Swap(0))
-
-		summary[metrics.IDTraceCacheHit] = metrics.MetricValue(pm.frameCacheHit.Swap(0))
-		summary[metrics.IDTraceCacheMiss] = metrics.MetricValue(pm.frameCacheMiss.Swap(0))
-
-		summary[metrics.IDErrProcNotExist] = metrics.MetricValue(pm.mappingStats.errProcNotExist.Swap(0))
-		summary[metrics.IDErrProcESRCH] = metrics.MetricValue(pm.mappingStats.errProcESRCH.Swap(0))
-		summary[metrics.IDErrProcPerm] = metrics.MetricValue(pm.mappingStats.errProcPerm.Swap(0))
-		summary[metrics.IDNumProcAttempts] = metrics.MetricValue(pm.mappingStats.numProcAttempts.Swap(0))
-		summary[metrics.IDMaxProcParseUsec] = metrics.MetricValue(pm.mappingStats.maxProcParseUsec.Swap(0))
-		summary[metrics.IDTotalProcParseUsec] = metrics.MetricValue(pm.mappingStats.totalProcParseUsec.Swap(0))
-		summary[metrics.IDErrProcParse] = metrics.MetricValue(pm.mappingStats.numProcParseErrors.Swap(0))
-
-		mapsMetrics := pm.ebpf.CollectMetrics()
-		for _, metric := range mapsMetrics {
-			summary[metric.ID] = metric.Value
+		if v := int64(pm.elfInfoCacheHit.Swap(0)); v != 0 {
+			tb.AgentElfInfoCacheHits.Add(ctx, v)
+		}
+		if v := int64(pm.elfInfoCacheMiss.Swap(0)); v != 0 {
+			tb.AgentElfInfoCacheMisses.Add(ctx, v)
 		}
 
-		pm.eim.UpdateMetricSummary(summary)
-		pm.metricsAddSlice(metricSummaryToSlice(summary))
+		if v := int64(pm.frameCacheHit.Swap(0)); v != 0 {
+			tb.AgentTraceCacheHits.Add(ctx, v)
+		}
+		if v := int64(pm.frameCacheMiss.Swap(0)); v != 0 {
+			tb.AgentTraceCacheMisses.Add(ctx, v)
+		}
+
+		if v := int64(pm.mappingStats.errProcNotExist.Swap(0)); v != 0 {
+			tb.AgentErrorsProcNotExists.Add(ctx, v)
+		}
+		if v := int64(pm.mappingStats.errProcESRCH.Swap(0)); v != 0 {
+			tb.AgentErrorsProcEsrch.Add(ctx, v)
+		}
+		if v := int64(pm.mappingStats.errProcPerm.Swap(0)); v != 0 {
+			tb.AgentErrorsProcPerm.Add(ctx, v)
+		}
+		if v := int64(pm.mappingStats.numProcAttempts.Swap(0)); v != 0 {
+			tb.AgentNumProcAttempts.Add(ctx, v)
+		}
+		tb.AgentMaxProcParseUs.Record(ctx, int64(pm.mappingStats.maxProcParseUsec.Swap(0)))
+		if v := int64(pm.mappingStats.totalProcParseUsec.Swap(0)); v != 0 {
+			tb.AgentTimeTotalProcParse.Add(ctx, v)
+		}
+		if v := int64(pm.mappingStats.numProcParseErrors.Swap(0)); v != 0 {
+			tb.AgentErrorsProcParse.Add(ctx, v)
+		}
+
+		pm.ebpf.CollectMetrics(ctx, tb)
+		pm.eim.UpdateMetricSummary(ctx, tb)
 	})
 }
 

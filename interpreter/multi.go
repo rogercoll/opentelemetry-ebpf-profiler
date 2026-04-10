@@ -4,12 +4,13 @@
 package interpreter // import "go.opentelemetry.io/ebpf-profiler/interpreter"
 
 import (
+	"context"
 	"errors"
 
+	"go.opentelemetry.io/ebpf-profiler/collector/telemetry"
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 	"go.opentelemetry.io/ebpf-profiler/libc"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
-	"go.opentelemetry.io/ebpf-profiler/metrics"
 	"go.opentelemetry.io/ebpf-profiler/process"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
@@ -127,20 +128,14 @@ func (m *MultiInstance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames, mapp
 }
 
 // GetAndResetMetrics collects metrics from all interpreter instances.
-func (m *MultiInstance) GetAndResetMetrics() ([]metrics.Metric, error) {
-	var allMetrics []metrics.Metric
+func (m *MultiInstance) GetAndResetMetrics(ctx context.Context, tb *telemetry.TelemetryBuilder) error {
 	var errs []error
-
 	for _, instance := range m.instances {
-		metrics, err := instance.GetAndResetMetrics()
-		if err != nil {
+		if err := instance.GetAndResetMetrics(ctx, tb); err != nil {
 			errs = append(errs, err)
-			continue
 		}
-		allMetrics = append(allMetrics, metrics...)
 	}
-
-	return allMetrics, errors.Join(errs...)
+	return errors.Join(errs...)
 }
 
 func (m *MultiInstance) ReleaseResources() error {

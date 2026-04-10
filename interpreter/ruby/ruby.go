@@ -4,6 +4,7 @@
 package ruby // import "go.opentelemetry.io/ebpf-profiler/interpreter/ruby"
 
 import (
+	"context"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -25,7 +26,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
-	"go.opentelemetry.io/ebpf-profiler/metrics"
+	"go.opentelemetry.io/ebpf-profiler/collector/telemetry"
 	npsr "go.opentelemetry.io/ebpf-profiler/nopanicslicereader"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
 	"go.opentelemetry.io/ebpf-profiler/successfailurecounter"
@@ -1244,39 +1245,18 @@ func profileFrameFullLabel(classPath, label, baseLabel, methodName libpf.String,
 	return libpf.Intern(profileLabel)
 }
 
-func (r *rubyInstance) GetAndResetMetrics() ([]metrics.Metric, error) {
+func (r *rubyInstance) GetAndResetMetrics(ctx context.Context, tb *telemetry.TelemetryBuilder) error {
 	addrToStringStats := r.addrToString.ResetMetrics()
 
-	return []metrics.Metric{
-		{
-			ID:    metrics.IDRubySymbolizationSuccess,
-			Value: metrics.MetricValue(r.successCount.Swap(0)),
-		},
-		{
-			ID:    metrics.IDRubySymbolizationFailure,
-			Value: metrics.MetricValue(r.failCount.Swap(0)),
-		},
-		{
-			ID:    metrics.IDRubyAddrToStringHit,
-			Value: metrics.MetricValue(addrToStringStats.Hits),
-		},
-		{
-			ID:    metrics.IDRubyAddrToStringMiss,
-			Value: metrics.MetricValue(addrToStringStats.Misses),
-		},
-		{
-			ID:    metrics.IDRubyAddrToStringAdd,
-			Value: metrics.MetricValue(addrToStringStats.Inserts),
-		},
-		{
-			ID:    metrics.IDRubyAddrToStringDel,
-			Value: metrics.MetricValue(addrToStringStats.Removals),
-		},
-		{
-			ID:    metrics.IDRubyMaxSize,
-			Value: metrics.MetricValue(r.maxSize.Swap(0)),
-		},
-	}, nil
+	tb.AgentRubySymbolizationSuccesses.Add(ctx, int64(r.successCount.Swap(0)))
+	tb.AgentRubySymbolizationFailures.Add(ctx, int64(r.failCount.Swap(0)))
+	tb.AgentRubyAddrToStringHits.Add(ctx, int64(addrToStringStats.Hits))
+	tb.AgentRubyAddrToStringMisses.Add(ctx, int64(addrToStringStats.Misses))
+	tb.AgentRubyAddrToStringAdd.Add(ctx, int64(addrToStringStats.Inserts))
+	tb.AgentRubyAddrToStringDel.Add(ctx, int64(addrToStringStats.Removals))
+	tb.AgentRubyMaxSize.Record(ctx, int64(r.maxSize.Swap(0)))
+
+	return nil
 }
 
 // determineRubyVersion looks for the symbol ruby_version and extracts version

@@ -4,16 +4,17 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"math/bits"
 	"unsafe"
 
+	"go.opentelemetry.io/ebpf-profiler/collector/telemetry"
 	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
 	"go.opentelemetry.io/ebpf-profiler/lpm"
-	"go.opentelemetry.io/ebpf-profiler/metrics"
 	sdtypes "go.opentelemetry.io/ebpf-profiler/nativeunwind/stackdeltatypes"
 	pmebpf "go.opentelemetry.io/ebpf-profiler/processmanager/ebpfapi"
 	"go.opentelemetry.io/ebpf-profiler/support"
@@ -39,8 +40,7 @@ var _ interpreter.EbpfHandler = &ebpfMapsCoredump{}
 func (emc *ebpfMapsCoredump) RemoveReportedPID(libpf.PID) {
 }
 
-func (emc *ebpfMapsCoredump) CollectMetrics() []metrics.Metric {
-	return []metrics.Metric{}
+func (emc *ebpfMapsCoredump) CollectMetrics(context.Context, *telemetry.TelemetryBuilder) {
 }
 
 func (emc *ebpfMapsCoredump) UpdateInterpreterOffsets(ebpfProgIndex uint16,

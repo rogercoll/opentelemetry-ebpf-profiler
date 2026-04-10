@@ -28,10 +28,10 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
 
+	"go.opentelemetry.io/ebpf-profiler/collector/telemetry"
 	"go.opentelemetry.io/ebpf-profiler/kallsyms"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/xsync"
-	"go.opentelemetry.io/ebpf-profiler/metrics"
 	"go.opentelemetry.io/ebpf-profiler/nativeunwind/elfunwindinfo"
 	"go.opentelemetry.io/ebpf-profiler/periodiccaller"
 	pm "go.opentelemetry.io/ebpf-profiler/processmanager"
@@ -41,6 +41,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/support"
 	"go.opentelemetry.io/ebpf-profiler/times"
 	"go.opentelemetry.io/ebpf-profiler/tracer/types"
+	"go.opentelemetry.io/otel/metric"
 )
 
 // Compile time check to make sure times.Times satisfies the interfaces.
@@ -101,6 +102,12 @@ type Tracer struct {
 	// associated eBPF maps.
 	processManager *pm.ProcessManager
 
+	// tb provides access to the OTel TelemetryBuilder for recording metrics.
+	tb *telemetry.TelemetryBuilder
+
+	// bpfCounters maps eBPF metric indices to OTel counter instruments.
+	bpfCounters []metric.Int64Counter
+
 	// tracePool is cache of libpf.EbpfTrace to avoid GC pressure
 	tracePool sync.Pool
 
@@ -147,6 +154,8 @@ func (t *Tracer) signalDone() {
 }
 
 type Config struct {
+	// TelemetryBuilder provides access to the OTel TelemetryBuilder for recording metrics.
+	TelemetryBuilder *telemetry.TelemetryBuilder
 	// ExecutableReporter allows to configure a ExecutableReporter to hook seen executables.
 	// NOTE: This is used by external implementations embedding opentelemtry-ebpf-profiler.
 	ExecutableReporter reporter.ExecutableReporter
@@ -261,12 +270,17 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 	processManager, err := pm.New(ctx, cfg.IncludeTracers, cfg.Intervals.MonitorInterval(),
 		cfg.Intervals.ExecutableUnloadDelay(), ebpfHandler, cfg.TraceReporter, cfg.ExecutableReporter,
 		elfunwindinfo.NewStackDeltaProvider(),
-		cfg.FilterErrorFrames, cfg.IncludeEnvVars)
+		cfg.FilterErrorFrames, cfg.IncludeEnvVars, cfg.TelemetryBuilder)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create processManager: %v", err)
 	}
 
 	perfEventList := []*perf.Event{}
+
+	var bpfCounters []metric.Int64Counter
+	if cfg.TelemetryBuilder != nil {
+		bpfCounters = buildBPFMetricsTranslation(cfg.TelemetryBuilder)
+	}
 
 	tracer := &Tracer{
 		kernelSymbolizer:       kernelSymbolizer,
@@ -282,6 +296,8 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 		samplesPerSecond:       cfg.SamplesPerSecond,
 		probabilisticInterval:  cfg.ProbabilisticInterval,
 		probabilisticThreshold: cfg.ProbabilisticThreshold,
+		tb:                     cfg.TelemetryBuilder,
+		bpfCounters:            bpfCounters,
 		done:                   make(chan libpf.Void),
 	}
 
@@ -957,22 +973,18 @@ func (t *Tracer) monitorPIDEventsMap(keys *[]libpf.PIDTID) error {
 }
 
 // eBPFMetricsCollector retrieves the eBPF metrics, calculates their delta values,
-// and translates eBPF IDs into Metric ID.
-// Returns a slice of Metric ID/Value pairs.
+// and records them directly via the TelemetryBuilder counter instruments.
 func (t *Tracer) eBPFMetricsCollector(
-	translateIDs []metrics.MetricID,
-	previousMetricValue []metrics.MetricValue,
-) []metrics.Metric {
+	ctx context.Context,
+	previousMetricValue []int64,
+) {
 	metricsMap := t.ebpfMaps["metrics"]
-	metricsUpdates := make([]metrics.Metric, 0, len(translateIDs))
 
-	// Iterate over all known metric IDs
-	for ebpfID, metricID := range translateIDs {
+	for ebpfID, counter := range t.bpfCounters {
 		var perCPUValues []uint64
 
 		// Checking for 'gaps' in the translation table.
-		// That allows non-contiguous metric IDs, e.g. after removal/deprecation of a metric ID.
-		if metricID == metrics.IDInvalid {
+		if counter == nil {
 			continue
 		}
 
@@ -981,19 +993,15 @@ func (t *Tracer) eBPFMetricsCollector(
 			log.Errorf("Failed trying to lookup per CPU element: %v", err)
 			continue
 		}
-		value := metrics.MetricValue(0)
+		var value int64
 		for _, val := range perCPUValues {
-			value += metrics.MetricValue(val)
+			value += int64(val)
 		}
 
-		// The monitoring infrastructure expects instantaneous values (gauges).
-		// => for cumulative metrics (counters), send deltas of the observed values, so they
-		// can be interpreted as gauges.
+		// For cumulative metrics (counters), send deltas of the observed values.
 		if ebpfID < support.MetricIDBeginCumulative {
-			// We don't assume 64bit counters to overflow
 			deltaValue := value - previousMetricValue[ebpfID]
 
-			// 0 deltas add no value when summed up for display purposes in the UI
 			if deltaValue == 0 {
 				continue
 			}
@@ -1002,14 +1010,8 @@ func (t *Tracer) eBPFMetricsCollector(
 			value = deltaValue
 		}
 
-		// Collect the metrics for reporting
-		metricsUpdates = append(metricsUpdates, metrics.Metric{
-			ID:    metricID,
-			Value: value,
-		})
+		counter.Add(ctx, value)
 	}
-
-	return metricsUpdates
 }
 
 // Various bpf trace handling related errors:
@@ -1125,18 +1127,14 @@ func (t *Tracer) StartMapMonitors(ctx context.Context, traceOutChan chan<- *libp
 			return true
 		})
 
-	// translateIDs is a translation table for eBPF IDs into Metric IDs.
-	// Index is the ebpfID, value is the corresponding metricID.
-	translateIDs := support.MetricsTranslation
-
 	// previousMetricValue stores the previously retrieved metric values to
 	// calculate and store delta values.
-	previousMetricValue := make([]metrics.MetricValue, len(translateIDs))
+	previousMetricValue := make([]int64, len(t.bpfCounters))
 
 	periodiccaller.Start(ctx, t.intervals.MonitorInterval(), func() {
-		metrics.AddSlice(eventMetricCollector())
-		metrics.AddSlice(traceEventMetricCollector())
-		metrics.AddSlice(t.eBPFMetricsCollector(translateIDs, previousMetricValue))
+		eventMetricCollector(ctx, t.tb)
+		traceEventMetricCollector(ctx, t.tb)
+		t.eBPFMetricsCollector(ctx, previousMetricValue)
 	})
 
 	return nil
@@ -1243,7 +1241,7 @@ func (t *Tracer) EnableProfiling() error {
 // a random number between 0 and ProbabilisticThresholdMax-1 every interval. If the random
 // number is smaller than threshold it will enable the frequency based sampling for this
 // time interval. Otherwise the frequency based sampling events are disabled.
-func (t *Tracer) probabilisticProfile(interval time.Duration, threshold uint) {
+func (t *Tracer) probabilisticProfile(ctx context.Context, interval time.Duration, threshold uint) {
 	enableSampling := false
 	probProfilingStatus := probProfilingDisable
 
@@ -1258,7 +1256,7 @@ func (t *Tracer) probabilisticProfile(interval time.Duration, threshold uint) {
 
 	events := t.perfEntrypoints.WLock()
 	defer t.perfEntrypoints.WUnlock(&events)
-	var enableErr, disableErr metrics.MetricValue
+	var enableErr, disableErr int64
 	for _, event := range *events {
 		if enableSampling {
 			if err := event.Enable(); err != nil {
@@ -1273,28 +1271,30 @@ func (t *Tracer) probabilisticProfile(interval time.Duration, threshold uint) {
 			log.Errorf("Failed to disable frequency based sampling: %v", err)
 		}
 	}
-	if enableErr != 0 {
-		metrics.Add(metrics.IDPerfEventEnableErr, enableErr)
+	if t.tb != nil {
+		if enableErr != 0 {
+			t.tb.PerfEventEnableErr.Add(ctx, enableErr)
+		}
+		if disableErr != 0 {
+			t.tb.PerfEventDisableErr.Add(ctx, disableErr)
+		}
+		t.tb.ProbProfilingStatus.Record(ctx, int64(probProfilingStatus))
 	}
-	if disableErr != 0 {
-		metrics.Add(metrics.IDPerfEventDisableErr, disableErr)
-	}
-	metrics.Add(metrics.IDProbProfilingStatus,
-		metrics.MetricValue(probProfilingStatus))
 }
 
 // StartProbabilisticProfiling periodically runs probabilistic profiling.
 func (t *Tracer) StartProbabilisticProfiling(ctx context.Context) {
-	metrics.Add(metrics.IDProbProfilingInterval,
-		metrics.MetricValue(t.probabilisticInterval.Seconds()))
+	if t.tb != nil {
+		t.tb.ProbProfilingInterval.Record(ctx, int64(t.probabilisticInterval.Seconds()))
+	}
 
 	// Run a single iteration of probabilistic profiling to avoid needing
 	// to wait for the first interval to pass with periodiccaller.Start()
 	// before getting called.
-	t.probabilisticProfile(t.probabilisticInterval, t.probabilisticThreshold)
+	t.probabilisticProfile(ctx, t.probabilisticInterval, t.probabilisticThreshold)
 
 	periodiccaller.Start(ctx, t.probabilisticInterval, func() {
-		t.probabilisticProfile(t.probabilisticInterval, t.probabilisticThreshold)
+		t.probabilisticProfile(ctx, t.probabilisticInterval, t.probabilisticThreshold)
 	})
 }
 

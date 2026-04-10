@@ -5,6 +5,7 @@ package python // import "go.opentelemetry.io/ebpf-profiler/interpreter/python"
 
 import (
 	"bytes"
+	"context"
 	"debug/elf"
 	"encoding/hex"
 	"errors"
@@ -27,7 +28,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libc"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
-	"go.opentelemetry.io/ebpf-profiler/metrics"
+	"go.opentelemetry.io/ebpf-profiler/collector/telemetry"
 	"go.opentelemetry.io/ebpf-profiler/nativeunwind/elfunwindinfo"
 	npsr "go.opentelemetry.io/ebpf-profiler/nopanicslicereader"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
@@ -343,35 +344,17 @@ type pythonInstance struct {
 
 var _ interpreter.Instance = &pythonInstance{}
 
-func (p *pythonInstance) GetAndResetMetrics() ([]metrics.Metric, error) {
+func (p *pythonInstance) GetAndResetMetrics(ctx context.Context, tb *telemetry.TelemetryBuilder) error {
 	addrToCodeObjectStats := p.addrToCodeObject.ResetMetrics()
 
-	return []metrics.Metric{
-		{
-			ID:    metrics.IDPythonSymbolizationSuccesses,
-			Value: metrics.MetricValue(p.successCount.Swap(0)),
-		},
-		{
-			ID:    metrics.IDPythonSymbolizationFailures,
-			Value: metrics.MetricValue(p.failCount.Swap(0)),
-		},
-		{
-			ID:    metrics.IDPythonAddrToCodeObjectHit,
-			Value: metrics.MetricValue(addrToCodeObjectStats.Hits),
-		},
-		{
-			ID:    metrics.IDPythonAddrToCodeObjectMiss,
-			Value: metrics.MetricValue(addrToCodeObjectStats.Misses),
-		},
-		{
-			ID:    metrics.IDPythonAddrToCodeObjectAdd,
-			Value: metrics.MetricValue(addrToCodeObjectStats.Inserts),
-		},
-		{
-			ID:    metrics.IDPythonAddrToCodeObjectDel,
-			Value: metrics.MetricValue(addrToCodeObjectStats.Removals),
-		},
-	}, nil
+	tb.AgentPythonSymbolizationSuccesses.Add(ctx, int64(p.successCount.Swap(0)))
+	tb.AgentPythonSymbolizationFailures.Add(ctx, int64(p.failCount.Swap(0)))
+	tb.AgentPythonAddrToCodeObjectHits.Add(ctx, int64(addrToCodeObjectStats.Hits))
+	tb.AgentPythonAddrToCodeObjectMisses.Add(ctx, int64(addrToCodeObjectStats.Misses))
+	tb.AgentPythonAddrToCodeObjectAdd.Add(ctx, int64(addrToCodeObjectStats.Inserts))
+	tb.AgentPythonAddrToCodeObjectDel.Add(ctx, int64(addrToCodeObjectStats.Removals))
+
+	return nil
 }
 
 func (p *pythonInstance) UpdateLibcInfo(ebpf interpreter.EbpfHandler, pid libpf.PID,

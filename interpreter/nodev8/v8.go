@@ -154,6 +154,7 @@ package nodev8 // import "go.opentelemetry.io/ebpf-profiler/interpreter/nodev8"
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -173,7 +174,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
 	"go.opentelemetry.io/ebpf-profiler/lpm"
-	"go.opentelemetry.io/ebpf-profiler/metrics"
+	"go.opentelemetry.io/ebpf-profiler/collector/telemetry"
 	"go.opentelemetry.io/ebpf-profiler/nativeunwind/elfunwindinfo"
 	npsr "go.opentelemetry.io/ebpf-profiler/nopanicslicereader"
 	"go.opentelemetry.io/ebpf-profiler/process"
@@ -615,86 +616,32 @@ func (i *v8Instance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
 	return nil
 }
 
-func (i *v8Instance) GetAndResetMetrics() ([]metrics.Metric, error) {
+func (i *v8Instance) GetAndResetMetrics(ctx context.Context, tb *telemetry.TelemetryBuilder) error {
 	addrToStringStats := i.addrToString.ResetMetrics()
 	addrToSFIStats := i.addrToSFI.ResetMetrics()
 	addrToCodeStats := i.addrToCode.ResetMetrics()
 	addrToSourceStats := i.addrToSource.ResetMetrics()
 
-	return []metrics.Metric{
-		{
-			ID:    metrics.IDV8SymbolizationSuccess,
-			Value: metrics.MetricValue(i.successCount.Swap(0)),
-		},
-		{
-			ID:    metrics.IDV8SymbolizationFailure,
-			Value: metrics.MetricValue(i.failCount.Swap(0)),
-		},
-		{
-			ID:    metrics.IDV8AddrToStringHit,
-			Value: metrics.MetricValue(addrToStringStats.Hits),
-		},
-		{
-			ID:    metrics.IDV8AddrToStringMiss,
-			Value: metrics.MetricValue(addrToStringStats.Misses),
-		},
-		{
-			ID:    metrics.IDV8AddrToStringAdd,
-			Value: metrics.MetricValue(addrToStringStats.Inserts),
-		},
-		{
-			ID:    metrics.IDV8AddrToStringDel,
-			Value: metrics.MetricValue(addrToStringStats.Removals),
-		},
-		{
-			ID:    metrics.IDV8AddrToSFIHit,
-			Value: metrics.MetricValue(addrToSFIStats.Hits),
-		},
-		{
-			ID:    metrics.IDV8AddrToSFIMiss,
-			Value: metrics.MetricValue(addrToSFIStats.Misses),
-		},
-		{
-			ID:    metrics.IDV8AddrToSFIAdd,
-			Value: metrics.MetricValue(addrToSFIStats.Inserts),
-		},
-		{
-			ID:    metrics.IDV8AddrToSFIDel,
-			Value: metrics.MetricValue(addrToSFIStats.Removals),
-		},
-		{
-			ID:    metrics.IDV8AddrToFuncHit,
-			Value: metrics.MetricValue(addrToCodeStats.Hits),
-		},
-		{
-			ID:    metrics.IDV8AddrToFuncMiss,
-			Value: metrics.MetricValue(addrToCodeStats.Misses),
-		},
-		{
-			ID:    metrics.IDV8AddrToFuncAdd,
-			Value: metrics.MetricValue(addrToCodeStats.Inserts),
-		},
-		{
-			ID:    metrics.IDV8AddrToFuncDel,
-			Value: metrics.MetricValue(addrToCodeStats.Removals),
-		},
-		{
-			ID:    metrics.IDV8AddrToSourceHit,
-			Value: metrics.MetricValue(addrToSourceStats.Hits),
-		},
-		{
-			ID:    metrics.IDV8AddrToSourceMiss,
-			Value: metrics.MetricValue(addrToSourceStats.Misses),
-		},
-		{
-			ID:    metrics.IDV8AddrToSourceAdd,
-			Value: metrics.MetricValue(addrToSourceStats.Inserts),
-		},
-		{
-			ID:    metrics.IDV8AddrToSourceDel,
-			Value: metrics.MetricValue(addrToSourceStats.Removals),
-		},
-	}, nil
+	tb.AgentV8SymbolizationSuccesses.Add(ctx, int64(i.successCount.Swap(0)))
+	tb.AgentV8SymbolizationFailures.Add(ctx, int64(i.failCount.Swap(0)))
+	tb.AgentV8AddrToStringHits.Add(ctx, int64(addrToStringStats.Hits))
+	tb.AgentV8AddrToStringMisses.Add(ctx, int64(addrToStringStats.Misses))
+	tb.AgentV8AddrToStringAdd.Add(ctx, int64(addrToStringStats.Inserts))
+	tb.AgentV8AddrToStringDel.Add(ctx, int64(addrToStringStats.Removals))
+	tb.AgentV8AddrToSfiHits.Add(ctx, int64(addrToSFIStats.Hits))
+	tb.AgentV8AddrToSfiMisses.Add(ctx, int64(addrToSFIStats.Misses))
+	tb.AgentV8AddrToSfiAdd.Add(ctx, int64(addrToSFIStats.Inserts))
+	tb.AgentV8AddrToSfiDel.Add(ctx, int64(addrToSFIStats.Removals))
+	tb.AgentV8AddrToFuncHits.Add(ctx, int64(addrToCodeStats.Hits))
+	tb.AgentV8AddrToFuncMisses.Add(ctx, int64(addrToCodeStats.Misses))
+	tb.AgentV8AddrToFuncAdd.Add(ctx, int64(addrToCodeStats.Inserts))
+	tb.AgentV8AddrToFuncDel.Add(ctx, int64(addrToCodeStats.Removals))
+	tb.AgentV8AddrToSourceHits.Add(ctx, int64(addrToSourceStats.Hits))
+	tb.AgentV8AddrToSourceMisses.Add(ctx, int64(addrToSourceStats.Misses))
+	tb.AgentV8AddrToSourceAdd.Add(ctx, int64(addrToSourceStats.Inserts))
+	tb.AgentV8AddrToSourceDel.Add(ctx, int64(addrToSourceStats.Removals))
+
+	return nil
 }
 
 // v8Ver encodes the x.y.z version to single uint32
