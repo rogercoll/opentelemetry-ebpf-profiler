@@ -9,6 +9,8 @@ ci-kernels
 # Ignore target directory
 target/*
 
+generated_*_test.go
+
 # auto-generated bin files
 cmd/otelcol-ebpf-profiler/*.go
 cmd/otelcol-ebpf-profiler/go.mod

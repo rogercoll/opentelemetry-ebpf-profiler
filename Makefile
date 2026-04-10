@@ -80,7 +80,7 @@ generate-collector:
 		--output-path cmd/otelcol-ebpf-profiler
 
 ebpf-profiler: ebpf
-	go build $(GO_FLAGS) -tags $(GO_TAGS)
+	go build $(GO_FLAGS) -tags $(GO_TAGS) -o $@ ./cmd/ebpf-profiler
 
 otelcol-ebpf-profiler: ebpf generate-collector
 	cd cmd/otelcol-ebpf-profiler/ && go build $(GO_FLAGS) -tags "$(GO_TAGS)" -o ../../$@

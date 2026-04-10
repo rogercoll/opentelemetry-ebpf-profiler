@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package internal // import "go.opentelemetry.io/ebpf-profiler/collector/internal"
+package collector // import "go.opentelemetry.io/ebpf-profiler"
 
 import (
 	"context"
@@ -9,7 +9,7 @@ import (
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/consumer/xconsumer"
 	"go.opentelemetry.io/collector/receiver"
-	"go.opentelemetry.io/ebpf-profiler/collector/config"
+	"go.opentelemetry.io/ebpf-profiler/config"
 	"go.opentelemetry.io/ebpf-profiler/internal/controller"
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
@@ -22,17 +22,17 @@ const (
 	ctrlName = "go.opentelemetry.io/ebpf-profiler"
 )
 
-// Controller is a bridge between the Collector's [receiverprofiles.Profiles]
-// interface and our [internal.Controller].
-type Controller struct {
+// Receiver is a bridge between the Collector's [receiverprofiles.Profiles]
+// interface and our [controller.Controller].
+type Receiver struct {
 	ctlr       *controller.Controller
 	onShutdown func() error
 	errorMode  config.ErrorMode
 }
 
-func NewController(cfg *controller.Config, rs receiver.Settings,
+func newReceiver(cfg *controller.Config, rs receiver.Settings,
 	nextConsumer xconsumer.Profiles,
-) (*Controller, error) {
+) (*Receiver, error) {
 	intervals := times.New(cfg.ReporterInterval,
 		cfg.MonitorInterval, cfg.ProbabilisticInterval)
 
@@ -63,7 +63,7 @@ func NewController(cfg *controller.Config, rs receiver.Settings,
 	meter := rs.MeterProvider.Meter(ctrlName)
 	metrics.Start(meter)
 
-	return &Controller{
+	return &Receiver{
 		onShutdown: cfg.OnShutdown,
 		ctlr:       controller.New(cfg),
 		errorMode:  cfg.ErrorMode,
@@ -71,7 +71,7 @@ func NewController(cfg *controller.Config, rs receiver.Settings,
 }
 
 // Start starts the receiver.
-func (c *Controller) Start(ctx context.Context, _ component.Host) error {
+func (c *Receiver) Start(ctx context.Context, _ component.Host) error {
 	if err := c.ctlr.Start(ctx); err != nil {
 		if c.errorMode == config.IgnoreError {
 			c.ctlr.Shutdown()
@@ -84,7 +84,7 @@ func (c *Controller) Start(ctx context.Context, _ component.Host) error {
 }
 
 // Shutdown stops the receiver.
-func (c *Controller) Shutdown(_ context.Context) error {
+func (c *Receiver) Shutdown(_ context.Context) error {
 	c.ctlr.Shutdown()
 	if c.onShutdown != nil {
 		return c.onShutdown()

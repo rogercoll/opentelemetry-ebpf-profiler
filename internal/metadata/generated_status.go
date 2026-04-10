@@ -8,7 +8,7 @@ import (
 
 var (
 	Type      = component.MustNewType("profiling")
-	ScopeName = "go.opentelemetry.io/ebpf-profiler/collector"
+	ScopeName = "go.opentelemetry.io/ebpf-profiler"
 )
 
 const (

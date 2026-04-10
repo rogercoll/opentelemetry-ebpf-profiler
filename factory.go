@@ -1,9 +1,9 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-//go:generate go tool -modfile=../tools.mod mdatagen metadata.yaml
+//go:generate sh -c "go tool -modfile=tools.mod mdatagen metadata.yaml 2>/dev/null; sed -i 's/^package opentelemetry-ebpf-profiler$/package collector/' generated_*test.go 2>/dev/null; go tool -modfile=tools.mod mdatagen metadata.yaml 2>/dev/null; sed -i 's/^package opentelemetry-ebpf-profiler$/package collector/' generated_*test.go 2>/dev/null; gofmt -w generated_*test.go 2>/dev/null; exit 0"
 
-package collector // import "go.opentelemetry.io/ebpf-profiler/collector"
+package collector // import "go.opentelemetry.io/ebpf-profiler"
 
 import (
 	"errors"
@@ -13,8 +13,8 @@ import (
 	"go.opentelemetry.io/collector/receiver"
 	"go.opentelemetry.io/collector/receiver/xreceiver"
 
-	"go.opentelemetry.io/ebpf-profiler/collector/config"
-	"go.opentelemetry.io/ebpf-profiler/collector/internal/metadata"
+	"go.opentelemetry.io/ebpf-profiler/config"
+	"go.opentelemetry.io/ebpf-profiler/internal/metadata"
 )
 
 var errInvalidConfig = errors.New("invalid config")

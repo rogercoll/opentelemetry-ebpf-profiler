@@ -3,7 +3,7 @@
 
 //go:build linux && (amd64 || arm64)
 
-package collector // import "go.opentelemetry.io/ebpf-profiler/collector"
+package collector // import "go.opentelemetry.io/ebpf-profiler"
 
 import (
 	"context"
@@ -13,8 +13,7 @@ import (
 	"go.opentelemetry.io/collector/consumer/xconsumer"
 	"go.opentelemetry.io/collector/receiver"
 	"go.opentelemetry.io/collector/receiver/xreceiver"
-	"go.opentelemetry.io/ebpf-profiler/collector/config"
-	"go.opentelemetry.io/ebpf-profiler/collector/internal"
+	"go.opentelemetry.io/ebpf-profiler/config"
 	"go.opentelemetry.io/ebpf-profiler/internal/controller"
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 	"go.uber.org/zap/exp/zapslog"
@@ -45,6 +44,6 @@ func BuildProfilesReceiver(options ...Option) xreceiver.CreateProfilesFunc {
 			OnShutdown:         controllerOption.onShutdown,
 		}
 
-		return internal.NewController(controlerCfg, rs, nextConsumer)
+		return newReceiver(controlerCfg, rs, nextConsumer)
 	}
 }

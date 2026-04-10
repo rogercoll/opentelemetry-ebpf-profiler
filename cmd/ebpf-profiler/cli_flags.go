@@ -11,7 +11,7 @@ import (
 
 	"github.com/peterbourgon/ff/v3"
 
-	"go.opentelemetry.io/ebpf-profiler/collector/config"
+	"go.opentelemetry.io/ebpf-profiler/config"
 	"go.opentelemetry.io/ebpf-profiler/internal/controller"
 	"go.opentelemetry.io/ebpf-profiler/tracer"
 )
