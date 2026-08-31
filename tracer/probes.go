@@ -12,7 +12,6 @@ import (
 
 	"go.opentelemetry.io/ebpf-profiler/kallsyms"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
-	pm "go.opentelemetry.io/ebpf-profiler/processmanager"
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
 	"go.opentelemetry.io/ebpf-profiler/support"
 )
@@ -23,7 +22,6 @@ type ProbeContext struct {
 	maps             map[string]*cebpf.Map
 	sysVars          SysConfigVars
 	links            []link.Link
-	registerAttacher func(pm.ProbeAttacher)
 	KernelSymbolizer *kallsyms.Symbolizer
 	reg              ProbeRegistrar
 }
@@ -354,12 +352,6 @@ func (c *ProbeContext) AddLink(lnk link.Link) {
 	c.links = append(c.links, lnk)
 }
 
-// AddAttacher registers a per-process attacher with the process manager.
-// ProcessManager calls Match/Attach as new mappings appear and Detach on process exit.
-func (c *ProbeContext) AddAttacher(a pm.ProbeAttacher) {
-	c.registerAttacher(a)
-}
-
 // ProbeRegistrar lets a Probe register one or more origin IDs during Load.
 // Each call to Register allocates a unique ID backed by the supplied metadata;
 type ProbeRegistrar interface {
@@ -433,12 +425,9 @@ type PostTraceHandler interface {
 // Enable returns an error if the tracer has already been closed.
 func (t *Tracer) Enable(ctx context.Context, p Probe) error {
 	probeCtx := &ProbeContext{
-		maps:    t.ebpfMaps,
-		sysVars: t.sysConfigVars,
-		reg:     t.origins,
-		registerAttacher: func(a pm.ProbeAttacher) {
-			t.processManager.RegisterProbeAttacher(a)
-		},
+		maps:             t.ebpfMaps,
+		sysVars:          t.sysConfigVars,
+		reg:              t.origins,
 		KernelSymbolizer: t.kernelSymbolizer,
 	}
 

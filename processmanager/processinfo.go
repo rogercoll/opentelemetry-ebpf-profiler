@@ -225,25 +225,18 @@ func (pm *ProcessManager) handleNewInterpreter(pr process.Process, bias libpf.Ad
 	return anonymousMappingsWanted || instance.UsesAnonymousMappings(), nil
 }
 
-// attachProbesForMapping iterates the registered ProbeAttachers and calls Attach
+// notifyProcessWatchers iterates the registered ProbeAttachers and calls Attach
 // for every attacher whose Match returns true for the given mapping.
 // Attach may be called multiple times for the same attacher if the process
 // has more than one matching mapping. The caller must hold pm.mu for writing.
-func (pm *ProcessManager) attachProbesForMapping(pr process.Process, m *process.RawMapping) {
-	pid := pr.PID()
-	for _, a := range pm.probeAttachers {
-		if !a.Match(pr, m) {
-			continue
+func (pm *ProcessManager) notifyProcessWatchers(event ProcessEvent, pid libpf.PID, snapShot ProcessSnapshot) error {
+	for _, a := range pm.processWatcher {
+		err := a.NotifyProcess(event, pid, snapShot)
+		if err != nil {
+			return err
 		}
-		if err := a.Attach(pr, m); err != nil {
-			log.Errorf("Failed to attach probe for PID %d, mapping %s: %v", pid, m.Path, err)
-			continue
-		}
-		if pm.attachedProbes[pid] == nil {
-			pm.attachedProbes[pid] = make(map[ProbeAttacher]libpf.Void)
-		}
-		pm.attachedProbes[pid][a] = libpf.Void{}
 	}
+	return nil
 }
 
 func (pm *ProcessManager) getELFInfo(pr process.Process, mapping *process.RawMapping,
@@ -443,7 +436,12 @@ func (pm *ProcessManager) newFrameMapping(pr process.Process, m *process.RawMapp
 			anonymousMappingsWanted = updatedAnonymousMappingsWanted
 		}
 	}
-	pm.attachProbesForMapping(pr, m)
+
+	err = pm.notifyProcessWatchers(NewMappingFrame, pr.PID(), newProcessSnapshot(pr, m))
+	if err != nil {
+		// TODO: propagete
+		panic(err)
+	}
 	pm.mu.Unlock()
 
 	return libpf.NewFrameMapping(libpf.FrameMappingData{
@@ -518,10 +516,12 @@ func (pm *ProcessManager) processPIDExit(pid libpf.PID) {
 	pm.pidPageToMappingInfoSize -= min(pm.pidPageToMappingInfoSize, deleted)
 	pm.processRemovedInterpreters(pid, libpf.Set[util.OnDiskFileIdentifier]{})
 
-	for a := range pm.attachedProbes[pid] {
-		a.Detach(pid)
+	err = pm.notifyProcessWatchers(Exited, pid, nil)
+	if err != nil {
+		// TODO: propagate error
+		panic(err)
 	}
-	delete(pm.attachedProbes, pid)
+
 }
 
 // isInterpreterMapping reports whether a mapping should be passed to interpreter
