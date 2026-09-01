@@ -133,7 +133,7 @@ type ProcessManager struct {
 
 	metaEnrichers []process.MetaEnricher
 
-	processWatcher []ProcessSnapshotWatcher
+	processWatcher []ProcessWatcher
 }
 
 // Mapping represents an executable memory mapping of a process.

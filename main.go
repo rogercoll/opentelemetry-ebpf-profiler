@@ -138,7 +138,7 @@ func mainWithExitCode() exitCode {
 	log.Infof("Starting OTEL profiling agent %s", version)
 
 	ctlr := controller.New(cfg)
-	err = ctlr.Start(ctx)
+	err = ctlr.Start(ctx, nil)
 	if err != nil {
 		return failure("Failed to start agent controller: %v", err)
 	}

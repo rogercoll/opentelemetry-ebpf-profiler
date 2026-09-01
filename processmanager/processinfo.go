@@ -225,19 +225,6 @@ func (pm *ProcessManager) handleNewInterpreter(pr process.Process, bias libpf.Ad
 	return anonymousMappingsWanted || instance.UsesAnonymousMappings(), nil
 }
 
-// notifyProcessWatchers iterates the registered ProbeAttachers and calls Attach
-// for every attacher whose Match returns true for the given mapping.
-// Attach may be called multiple times for the same attacher if the process
-// has more than one matching mapping. The caller must hold pm.mu for writing.
-func (pm *ProcessManager) notifyProcessWatchers(event ProcessEvent, pid libpf.PID, snapShot ProcessSnapshot) error {
-	for _, a := range pm.processWatcher {
-		err := a.NotifyProcess(event, pid, snapShot)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
-}
 
 func (pm *ProcessManager) getELFInfo(pr process.Process, mapping *process.RawMapping,
 	elfRef *pfelf.Reference,
@@ -437,10 +424,11 @@ func (pm *ProcessManager) newFrameMapping(pr process.Process, m *process.RawMapp
 		}
 	}
 
-	err = pm.notifyProcessWatchers(NewMappingFrame, pr.PID(), newProcessSnapshot(pr, m))
-	if err != nil {
-		// TODO: propagete
-		panic(err)
+	for _, w := range pm.processWatcher {
+		if err := w.OnNewMapping(pr, m); err != nil {
+			// TODO: propagate
+			panic(err)
+		}
 	}
 	pm.mu.Unlock()
 
@@ -516,10 +504,11 @@ func (pm *ProcessManager) processPIDExit(pid libpf.PID) {
 	pm.pidPageToMappingInfoSize -= min(pm.pidPageToMappingInfoSize, deleted)
 	pm.processRemovedInterpreters(pid, libpf.Set[util.OnDiskFileIdentifier]{})
 
-	err = pm.notifyProcessWatchers(Exited, pid, nil)
-	if err != nil {
-		// TODO: propagate error
-		panic(err)
+	for _, w := range pm.processWatcher {
+		if err := w.OnProcessExit(pid); err != nil {
+			// TODO: propagate
+			panic(err)
+		}
 	}
 
 }

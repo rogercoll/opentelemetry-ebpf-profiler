@@ -12,6 +12,7 @@ import (
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
+	pm "go.opentelemetry.io/ebpf-profiler/processmanager"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
 	"go.opentelemetry.io/ebpf-profiler/times"
 	"go.opentelemetry.io/ebpf-profiler/tracer"
@@ -56,7 +57,7 @@ func New(cfg *Config) *Controller {
 //
 // See:
 // https://github.com/open-telemetry/opentelemetry-collector/blob/v0.144.0/otelcol/collector.go#L258-L260
-func (c *Controller) Start(ctx context.Context) error {
+func (c *Controller) Start(ctx context.Context, processWatchers []pm.ProcessWatcher) error {
 	if err := linux.ProbeBPFSyscall(); err != nil {
 		return fmt.Errorf("failed to probe eBPF syscall: %w", err)
 	}
@@ -104,6 +105,7 @@ func (c *Controller) Start(ctx context.Context) error {
 		OBIProcessCtx:           c.config.OBIProcessCtx,
 		PIDNamespaceTranslation: c.config.PIDNamespaceTranslation,
 		ProcessMetaEnrichers:    c.config.ProcessMetaEnrichers,
+		ProcessWatchers:         processWatchers,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to load eBPF tracer: %w", err)

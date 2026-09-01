@@ -125,21 +125,16 @@ func (p *probe) Load(_ context.Context, reg tracer.ProbeRegistrar, probeCtx *tra
 		return fmt.Errorf("program %q not found after loading", progName)
 	}
 	p.prog = prog
-
-	// Register for per-process callbacks instead of a global link.
-	probeCtx.AddAttacher(p)
 	return nil
 }
 
-// Match implements processmanager.ProbeAttacher.
-func (p *probe) Match(_ process.Process, mapping *process.RawMapping) bool {
-	return mapping.Path == p.target ||
-		filepath.Base(mapping.Path) == filepath.Base(p.target)
-}
+// OnNewMapping implements processmanager.ProcessWatcher. If the mapping matches
+// the target, it opens a PID-restricted uprobe and stores the link for cleanup.
+func (p *probe) OnNewMapping(pr process.Process, mapping *process.RawMapping) error {
+	if mapping.Path != p.target && filepath.Base(mapping.Path) != filepath.Base(p.target) {
+		return nil
+	}
 
-// Attach implements processmanager.ProbeAttacher. Opens a PID-restricted uprobe
-// for the given process and stores the link for later cleanup.
-func (p *probe) Attach(pr process.Process, mapping *process.RawMapping) error {
 	pid := pr.PID()
 	mappingFile, err := pr.OpenMappingFile(mapping)
 	if err != nil {
@@ -169,9 +164,9 @@ func (p *probe) Attach(pr process.Process, mapping *process.RawMapping) error {
 	return nil
 }
 
-// Detach implements processmanager.ProbeAttacher. Closes all uprobe links
-// for the exiting process.
-func (p *probe) Detach(pid libpf.PID) {
+// OnProcessExit implements processmanager.ProcessWatcher. Closes all uprobe
+// links for the exiting process.
+func (p *probe) OnProcessExit(pid libpf.PID) error {
 	p.mu.Lock()
 	links := p.links[pid]
 	delete(p.links, pid)
@@ -180,4 +175,5 @@ func (p *probe) Detach(pid libpf.PID) {
 	for _, lnk := range links {
 		lnk.Close()
 	}
+	return nil
 }

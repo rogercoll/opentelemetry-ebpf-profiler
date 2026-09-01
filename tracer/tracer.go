@@ -218,6 +218,8 @@ type Config struct {
 	// ProcessMetaEnrichers are optional hooks for enriching process metadata at
 	// process discovery time. Multiple enrichers are called in order.
 	ProcessMetaEnrichers []process.MetaEnricher
+	// ProcessWatchers receive process lifecycle events (new mapping, process exit).
+	ProcessWatchers []pm.ProcessWatcher
 	// PIDNamespaceTranslation toggles translation of host-level PIDs/TGIDs into
 	// their container-namespace equivalents. Useful for sidecar deployments where
 	// the profiler and the target application share a PID namespace but not host PIDs.
@@ -305,6 +307,7 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 		FilterErrorFrames:     cfg.FilterErrorFrames,
 		IncludeEnvVars:        cfg.IncludeEnvVars,
 		ProcessMetaEnrichers:  cfg.ProcessMetaEnrichers,
+		ProcessWatchers:       cfg.ProcessWatchers,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create processManager: %v", err)

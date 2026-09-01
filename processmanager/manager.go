@@ -73,6 +73,7 @@ type Config struct {
 	FilterErrorFrames     bool
 	IncludeEnvVars        libpf.Set[string]
 	ProcessMetaEnrichers  []process.MetaEnricher
+	ProcessWatchers       []ProcessWatcher
 }
 
 // New creates a new ProcessManager which is responsible for keeping track of loading
@@ -143,6 +144,7 @@ func New(ctx context.Context, cfg Config) (*ProcessManager, error) {
 		metricsAddSlice:          metrics.AddSlice,
 		filterErrorFrames:        cfg.FilterErrorFrames,
 		metaEnrichers:            metaEnrichers,
+		processWatcher:           cfg.ProcessWatchers,
 	}
 
 	collectInterpreterMetrics(ctx, pm, cfg.MonitorInterval)

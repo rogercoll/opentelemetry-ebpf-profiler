@@ -8,55 +8,16 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/process"
 )
 
-// ProcessEvent represents the type of eBPF probe.
-type ProcessEvent int
+// ProcessWatcher is implemented by components that need to observe process lifecycle events.
+// OnNewMapping is called for each new executable mapping seen for a process.
+// OnProcessExit is called exactly once when a tracked process exits.
+type ProcessWatcher interface {
+	// OnNewMapping is called for each new executable mapping seen for a PID.
+	// It may be called multiple times for the same PID if the process has more
+	// than one mapping. The mapping pointer is valid only for the duration of
+	// the call; implementations that retain it must copy the value.
+	OnNewMapping(pr process.Process, m *process.RawMapping) error
 
-const (
-	// ProbeModeKprobe represents a kernel probe.
-	NewMappingFrame ProcessEvent = iota
-	// ProbeModeKretprobe represents a kernel return probe.
-	Exited
-)
-
-// ConfigSnapshotWatcher is an interface that should be implemented by an
-// extension that wishes to be notified of the Collector's configuration.
-type ProcessSnapshotWatcher interface {
-	// NotifyConfig notifies the extension of the Collector's current effective configuration.
-	// The extension owns the `confmap.Conf`. Callers must ensure that it's safe for
-	// extensions to store the `conf` pointer and use it concurrently with any other
-	// instances of `conf`.
-	NotifyProcess(event ProcessEvent, pid libpf.PID, snapShot ProcessSnapshot) error
-}
-
-// ProcessSnapshot provides access to different representations of the Collector's
-// configuration.
-type ProcessSnapshot interface {
-	Process() process.Process
-	Mapping() *process.RawMapping
-
-	unexportedProcessSnapshot()
-}
-
-type processSnapshot struct {
-	process process.Process
-	mapping *process.RawMapping
-}
-
-func newProcessSnapshot(process process.Process, mapping *process.RawMapping) processSnapshot {
-	return processSnapshot{
-		process: process,
-		mapping: mapping,
-	}
-}
-
-func (ps processSnapshot) unexportedProcessSnapshot() {}
-
-func (ps processSnapshot) Process() process.Process {
-	// TODO: clone
-	return ps.process
-}
-
-func (ps processSnapshot) Mapping() *process.RawMapping {
-	// TODO: clone
-	return ps.mapping
+	// OnProcessExit is called when a tracked process exits.
+	OnProcessExit(pid libpf.PID) error
 }

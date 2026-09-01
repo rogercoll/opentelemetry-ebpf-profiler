@@ -19,6 +19,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/internal/controller"
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
+	pm "go.opentelemetry.io/ebpf-profiler/processmanager"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
 	"go.opentelemetry.io/ebpf-profiler/times"
 	"go.opentelemetry.io/ebpf-profiler/tracer"
@@ -103,7 +104,22 @@ func NewController(cfg *controller.Config, rs receiver.Settings,
 
 // Start the receiver.
 func (c *Controller) Start(ctx context.Context, host component.Host) error {
-	if err := c.ctlr.Start(ctx); err != nil {
+	var watchers []pm.ProcessWatcher
+	for _, id := range c.extensionIDs {
+		ext, ok := host.GetExtensions()[id]
+		if !ok {
+			continue
+		}
+		pp, ok := ext.(ProbeProvider)
+		if !ok {
+			continue
+		}
+		if w, ok := pp.Probe().(pm.ProcessWatcher); ok {
+			watchers = append(watchers, w)
+		}
+	}
+
+	if err := c.ctlr.Start(ctx, watchers); err != nil {
 		if c.errorMode == config.IgnoreError {
 			c.ctlr.Shutdown()
 			log.Errorf("eBPF profiler receiver failed, continuing without profiling: %v", err)
