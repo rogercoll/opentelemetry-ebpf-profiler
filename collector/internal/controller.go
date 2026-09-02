@@ -36,6 +36,7 @@ type ProbeProvider interface {
 // interface and our [internal.Controller].
 type Controller struct {
 	ctlr         *controller.Controller
+	cfg          *controller.Config
 	onShutdown   func() error
 	errorMode    config.ErrorMode
 	extensionIDs []component.ID
@@ -98,6 +99,7 @@ func NewController(cfg *controller.Config, rs receiver.Settings,
 	return &Controller{
 		onShutdown:   cfg.OnShutdown,
 		ctlr:         controller.New(cfg),
+		cfg:          cfg,
 		errorMode:    cfg.ErrorMode,
 		extensionIDs: cfg.Probes,
 	}, nil
@@ -105,6 +107,21 @@ func NewController(cfg *controller.Config, rs receiver.Settings,
 
 // Start the receiver.
 func (c *Controller) Start(ctx context.Context, host component.Host) error {
+	// Resolve the configured probe extensions before starting: probes that
+	// implement the ProcessWatcher listener interfaces receive process
+	// lifecycle events and must be known at process manager construction.
+	probes, err := c.resolveProbes(host)
+	if err != nil {
+		if c.errorMode == config.IgnoreError {
+			log.Errorf("Failed to resolve probe extensions, continuing without profiling: %v", err)
+			return nil
+		}
+		return err
+	}
+	for _, p := range probes {
+		c.cfg.ProcessWatchers = append(c.cfg.ProcessWatchers, p)
+	}
+
 	if err := c.ctlr.Start(ctx); err != nil {
 		if c.errorMode == config.IgnoreError {
 			c.Shutdown(ctx)
@@ -114,43 +131,43 @@ func (c *Controller) Start(ctx context.Context, host component.Host) error {
 		return err
 	}
 
-	if err := c.enableProbes(ctx, host); err != nil {
-		if c.errorMode == config.IgnoreError {
-			c.Shutdown(ctx)
-			log.Errorf("Failed to enable probe extensions, continuing without them: %v", err)
-			return nil
+	for i, p := range probes {
+		if err := c.ctlr.EnableProbe(ctx, p); err != nil {
+			if c.errorMode == config.IgnoreError {
+				c.Shutdown(ctx)
+				log.Errorf("Failed to enable probe extensions, continuing without them: %v", err)
+				return nil
+			}
+			return fmt.Errorf("enabling probe from extension %q: %w", c.extensionIDs[i], err)
 		}
-		return err
+		c.probes = append(c.probes, p)
+		log.Infof("Enabled probe from extension %q", c.extensionIDs[i])
 	}
 
 	return nil
 }
 
-// enableProbes resolves each configured extension ID from the host,
-// verifies it implements ProbeExtension, and enables its probe on the tracer.
-func (c *Controller) enableProbes(ctx context.Context, host component.Host) error {
+// resolveProbes resolves each configured extension ID from the host and
+// verifies it implements ProbeExtension.
+func (c *Controller) resolveProbes(host component.Host) ([]tracer.Probe, error) {
 	if len(c.extensionIDs) == 0 {
-		return nil
+		return nil, nil
 	}
 
 	extensions := host.GetExtensions()
+	probes := make([]tracer.Probe, 0, len(c.extensionIDs))
 	for _, id := range c.extensionIDs {
 		ext, ok := extensions[id]
 		if !ok {
-			return fmt.Errorf("extension %q not found; ensure it is listed under service::extensions", id)
+			return nil, fmt.Errorf("extension %q not found; ensure it is listed under service::extensions", id)
 		}
 		pp, ok := ext.(ProbeProvider)
 		if !ok {
-			return fmt.Errorf("extension %q does not implement ProbeExtension", id)
+			return nil, fmt.Errorf("extension %q does not implement ProbeExtension", id)
 		}
-		probe := pp.Probe()
-		if err := c.ctlr.EnableProbe(ctx, probe); err != nil {
-			return fmt.Errorf("enabling probe from extension %q: %w", id, err)
-		}
-		c.probes = append(c.probes, probe)
-		log.Infof("Enabled probe from extension %q", id)
+		probes = append(probes, pp.Probe())
 	}
-	return nil
+	return probes, nil
 }
 
 // Shutdown the receiver.

@@ -126,7 +126,6 @@ func New(ctx context.Context, cfg Config) (*ProcessManager, error) {
 		metricsAddSlice:          metrics.AddSlice,
 		filterErrorFrames:        cfg.FilterErrorFrames,
 		watchers:                 slices.Clone(cfg.ProcessWatchers),
-		attachedProbes:           make(map[libpf.PID]map[ProbeAttacher]libpf.Void),
 	}
 
 	collectInterpreterMetrics(ctx, pm, cfg.MonitorInterval)

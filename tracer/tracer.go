@@ -217,6 +217,10 @@ type Config struct {
 	MapScaleFactor int
 	// FrameCacheSize is the maximum size of the user-mode frame cache.
 	FrameCacheSize uint32
+	// ProcessWatchers receive process lifecycle events from the process
+	// manager. Probes and other extensions that implement the listener
+	// interfaces are provided here at configuration time.
+	ProcessWatchers []pm.ProcessWatcher
 	// FilterErrorFrames indicates whether error frames should be filtered.
 	FilterErrorFrames bool
 	// FilterIdleFrames indicates whether idle frames should be filtered.
@@ -319,7 +323,6 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 	}
 
 	metaStore := pm.NewMetadataStore(newMetaEnrichers(cfg))
-	contextStore := pm.NewProcessContextStore(metaStore)
 
 	processManager, err := pm.New(ctx, pm.Config{
 		InterpretersConfig:    cfg.InterpretersConfig,
@@ -331,9 +334,8 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 		KernelSymbolizer:      kernelSymbolizer,
 		FrameCacheSize:        cfg.FrameCacheSize,
 		FilterErrorFrames:     cfg.FilterErrorFrames,
-		// metaStore must come before contextStore: the context resolution
-		// reads the env vars metaStore collects.
-		ProcessWatchers: []pm.ProcessWatcher{metaStore, contextStore},
+		ProcessWatchers: append([]pm.ProcessWatcher{metaStore},
+			cfg.ProcessWatchers...),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create processManager: %v", err)
@@ -345,7 +347,7 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 		kernelSymbolizer:       kernelSymbolizer,
 		processManager:         processManager,
 		traceReporter:          cfg.TraceReporter,
-		traceDecorators:        []TraceDecorator{metaStore, contextStore},
+		traceDecorators:        []TraceDecorator{metaStore},
 		triggerPIDProcessing:   make(chan bool, 1),
 		tracePool:              newTracePool(),
 		pidEvents:              make(chan libpf.PIDTID, pidEventBufferSize),

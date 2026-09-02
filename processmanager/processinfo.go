@@ -223,39 +223,6 @@ func (pm *ProcessManager) handleNewInterpreter(pr process.Process, bias libpf.Ad
 	return anonymousMappingsWanted || instance.UsesAnonymousMappings(), nil
 }
 
-// attachProbesForMapping iterates the given ProbeAttachers and calls Attach
-// for every attacher whose Match returns true for the given mapping.
-// Attach may be called multiple times for the same attacher if the process
-// has more than one matching mapping. Match and Attach are invoked without
-// pm.mu held; the lock is taken only to record successful attachments.
-func (pm *ProcessManager) attachProbesForMapping(attachers []ProbeAttacher,
-	pr process.Process, m *process.RawMapping) {
-	pid := pr.PID()
-	var attached []ProbeAttacher
-	for _, a := range attachers {
-		if !a.Match(pr, m) {
-			continue
-		}
-		if err := a.Attach(pr, m); err != nil {
-			log.Errorf("Failed to attach probe for PID %d, mapping %s: %v", pid, m.Path, err)
-			continue
-		}
-		attached = append(attached, a)
-	}
-	if len(attached) == 0 {
-		return
-	}
-
-	pm.mu.Lock()
-	if pm.attachedProbes[pid] == nil {
-		pm.attachedProbes[pid] = make(map[ProbeAttacher]libpf.Void)
-	}
-	for _, a := range attached {
-		pm.attachedProbes[pid][a] = libpf.Void{}
-	}
-	pm.mu.Unlock()
-}
-
 func (pm *ProcessManager) getELFInfo(pr process.Process, mapping *process.RawMapping,
 	elfRef *pfelf.Reference,
 ) elfInfo {
@@ -453,11 +420,7 @@ func (pm *ProcessManager) newFrameMapping(pr process.Process, m *process.RawMapp
 			anonymousMappingsWanted = updatedAnonymousMappingsWanted
 		}
 	}
-	// Snapshot the attacher list under the lock; Match/Attach run without it.
-	attachers := pm.probeAttachers
 	pm.mu.Unlock()
-
-	pm.attachProbesForMapping(attachers, pr, m)
 
 	return libpf.NewFrameMapping(libpf.FrameMappingData{
 		File:       info.mappingFile,
@@ -532,14 +495,7 @@ func (pm *ProcessManager) processPIDExit(pid libpf.PID) {
 	pm.pidPageToMappingInfoSize -= min(pm.pidPageToMappingInfoSize, deleted)
 	pm.processRemovedInterpreters(pid, libpf.Set[util.OnDiskFileIdentifier]{})
 
-	attached := pm.attachedProbes[pid]
-	delete(pm.attachedProbes, pid)
 	pm.mu.Unlock()
-
-	// Detach is called without pm.mu held.
-	for a := range attached {
-		a.Detach(pid)
-	}
 }
 
 // isInterpreterMapping reports whether a mapping should be passed to interpreter
