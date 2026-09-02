@@ -9,6 +9,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"math"
 	"math/rand/v2"
 	"os"
@@ -32,6 +33,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/interpreter/interpreterconfig"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
 	"go.opentelemetry.io/ebpf-profiler/process"
+	"go.opentelemetry.io/ebpf-profiler/process/processcontext"
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
 
 	"go.opentelemetry.io/ebpf-profiler/kallsyms"
@@ -156,6 +158,13 @@ type Tracer struct {
 	// that origin. Only traces with a matching origin are dispatched.
 	postTraceHandlers map[uint16][]PostTraceHandler
 
+	// traceReporter is the interface symbolized trace events are reported to.
+	traceReporter reporter.TraceReporter
+
+	// traceDecorators annotate trace events with per-process attributes
+	// before reporting.
+	traceDecorators []TraceDecorator
+
 	// done is closed when the tracer encounters an unrecoverable error.
 	// Use Done() to obtain a read-only channel for use in select statements.
 	done     chan libpf.Void
@@ -167,6 +176,23 @@ type Tracer struct {
 // when the tracer should be stopped.
 func (t *Tracer) Done() <-chan libpf.Void {
 	return t.done
+}
+
+// newMetaEnrichers builds the process meta enricher chain: the built-in env
+// var and self container ID enrichers followed by the user-configured ones.
+func newMetaEnrichers(cfg *Config) []process.MetaEnricher {
+	enrichers := make([]process.MetaEnricher, 0, len(cfg.ProcessMetaEnrichers)+2)
+	// Cloned: the enricher closure outlives NewTracer, and the caller owns cfg.
+	enrichers = append(enrichers, process.NewEnvVarsEnricher(
+		maps.Clone(cfg.IncludeEnvVars), processcontext.EnvVarSet()))
+
+	selfContainerEnricher, err := process.NewSelfContainerIDEnricher()
+	if err != nil {
+		log.Debugf("Failed to detect self container ID via inode: %v", err)
+	} else {
+		enrichers = append(enrichers, selfContainerEnricher)
+	}
+	return append(enrichers, cfg.ProcessMetaEnrichers...)
 }
 
 // signalDone closes the done channel to indicate an unrecoverable error.
@@ -292,19 +318,22 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 		return nil, fmt.Errorf("failed to load eBPF maps: %v", err)
 	}
 
+	metaStore := pm.NewMetadataStore(newMetaEnrichers(cfg))
+	contextStore := pm.NewProcessContextStore(metaStore)
+
 	processManager, err := pm.New(ctx, pm.Config{
 		InterpretersConfig:    cfg.InterpretersConfig,
 		MonitorInterval:       cfg.Intervals.MonitorInterval(),
 		ExecutableUnloadDelay: cfg.Intervals.ExecutableUnloadDelay(),
 		EbpfHandler:           ebpfHandler,
-		TraceReporter:         cfg.TraceReporter,
 		ExecutableReporter:    cfg.ExecutableReporter,
 		StackDeltaProvider:    elfunwindinfo.NewStackDeltaProvider(),
 		KernelSymbolizer:      kernelSymbolizer,
 		FrameCacheSize:        cfg.FrameCacheSize,
 		FilterErrorFrames:     cfg.FilterErrorFrames,
-		IncludeEnvVars:        cfg.IncludeEnvVars,
-		ProcessMetaEnrichers:  cfg.ProcessMetaEnrichers,
+		// metaStore must come before contextStore: the context resolution
+		// reads the env vars metaStore collects.
+		ProcessWatchers: []pm.ProcessWatcher{metaStore, contextStore},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create processManager: %v", err)
@@ -315,6 +344,8 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 	tracer := &Tracer{
 		kernelSymbolizer:       kernelSymbolizer,
 		processManager:         processManager,
+		traceReporter:          cfg.TraceReporter,
+		traceDecorators:        []TraceDecorator{metaStore, contextStore},
 		triggerPIDProcessing:   make(chan bool, 1),
 		tracePool:              newTracePool(),
 		pidEvents:              make(chan libpf.PIDTID, pidEventBufferSize),
@@ -1298,6 +1329,14 @@ func (t *Tracer) StartProbabilisticProfiling(ctx context.Context) {
 	})
 }
 
+// TraceDecorator annotates trace events with per-process attributes. It is
+// called for every symbolized trace event, on the trace-handling hot path, so
+// it must not block or perform I/O; it should only read pre-computed per-PID
+// state.
+type TraceDecorator interface {
+	DecorateTrace(trace *libpf.Trace, meta *samples.TraceEventMeta)
+}
+
 func (t *Tracer) HandleTrace(bpfTrace *libpf.EbpfTrace) {
 	// Pre-handlers gated by origin may consume traces before symbolization.
 	for _, h := range t.preTraceHandlers[bpfTrace.Origin] {
@@ -1308,8 +1347,16 @@ func (t *Tracer) HandleTrace(bpfTrace *libpf.EbpfTrace) {
 	}
 
 	origin := bpfTrace.Origin
-	trace := t.processManager.HandleTrace(bpfTrace, t.origins.lookup(origin))
+	trace, meta := t.processManager.HandleTrace(bpfTrace, t.origins.lookup(origin))
 	t.tracePool.Put(bpfTrace)
+
+	for _, d := range t.traceDecorators {
+		d.DecorateTrace(trace, meta)
+	}
+
+	if err := t.traceReporter.ReportTraceEvent(trace, meta); err != nil {
+		log.Errorf("Failed to report trace event: %v", err)
+	}
 
 	// Post-handlers gated by origin receive the symbolized result.
 	for _, h := range t.postTraceHandlers[origin] {

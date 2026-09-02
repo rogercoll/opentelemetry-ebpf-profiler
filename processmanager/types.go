@@ -15,8 +15,6 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
-	"go.opentelemetry.io/ebpf-profiler/process"
-	"go.opentelemetry.io/ebpf-profiler/process/processcontext"
 	pmebpf "go.opentelemetry.io/ebpf-profiler/processmanager/ebpfapi"
 	eim "go.opentelemetry.io/ebpf-profiler/processmanager/execinfomanager"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
@@ -115,9 +113,6 @@ type ProcessManager struct {
 	// kernelSymbols resolves raw kernel frame addresses.
 	kernelSymbols kallsyms.Resolver
 
-	// traceReporter is the interface to report traces
-	traceReporter reporter.TraceReporter
-
 	// exeReporter is the interface to report executables
 	exeReporter reporter.ExecutableReporter
 
@@ -131,7 +126,8 @@ type ProcessManager struct {
 	// filterErrorFrames determines whether error frames are dropped by `ConvertTrace`.
 	filterErrorFrames bool
 
-	metaEnrichers []process.MetaEnricher
+	// watchers receive process lifecycle events. Immutable after New.
+	watchers []ProcessWatcher
 
 	// probeAttachers is the set of per-process probe attachers registered via
 	// RegisterProbeAttacher. Protected by mu.
@@ -172,11 +168,9 @@ func (m *Mapping) GetOnDiskFileIdentifier() util.OnDiskFileIdentifier {
 // processInfo contains information about the executable mappings
 // and Thread Specific Data of a process.
 type processInfo struct {
-	// process metadata, updated on executable changes
-	meta process.Meta
-	// processContext is the resolved OTel process-context snapshot.
-	// Published under ProcessManager.mu.
-	processContext processcontext.Info
+	// exe is the executable path, used to detect an exec. Updated on
+	// executable changes.
+	exe libpf.String
 	// executable mappings sorted by FileID and mapping start address
 	mappings []Mapping
 	// C-library Thread Specific Data information

@@ -34,15 +34,6 @@ func (nopEbpf) UpdateProcData(libpf.InterpreterType, libpf.PID, unsafe.Pointer) 
 	return nil
 }
 
-type traceCapture struct {
-	traces []*libpf.Trace
-}
-
-func (tc *traceCapture) ReportTraceEvent(trace *libpf.Trace, _ *samples.TraceEventMeta) error {
-	tc.traces = append(tc.traces, trace)
-	return nil
-}
-
 type fakeKernelSymbols struct {
 	snapshot kallsyms.Snapshot
 }
@@ -58,7 +49,6 @@ func TestNewConfiguresFrameCacheSize(t *testing.T) {
 		ExecutableUnloadDelay: time.Hour,
 		EbpfHandler:           &testEbpfHandler{},
 		FrameCacheSize:        1,
-		IncludeEnvVars:        libpf.Set[string]{},
 	})
 	require.NoError(t, err)
 
