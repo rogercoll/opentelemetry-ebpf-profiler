@@ -39,6 +39,16 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/util"
 )
 
+// notifyWatchers calls fn on every watcher implementing the listener
+// interface T. Must be called without pm.mu held.
+func notifyWatchers[T any](watchers []processwatcher.ProcessWatcher, fn func(T)) {
+	for _, w := range watchers {
+		if l, ok := w.(T); ok {
+			fn(l)
+		}
+	}
+}
+
 // isPIDLive checks if a PID belongs to a live process. It will never produce a false negative but
 // may produce a false positive (e.g. due to permissions) in which case an error will also be
 // returned.
