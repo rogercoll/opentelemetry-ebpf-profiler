@@ -8,7 +8,6 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
 	"go.opentelemetry.io/ebpf-profiler/process"
-	"go.opentelemetry.io/ebpf-profiler/reporter"
 )
 
 // InstanceStubs provides empty implementations of Instance hooks that are
@@ -20,7 +19,7 @@ func (is *InstanceStubs) UsesAnonymousMappings() bool {
 	return false
 }
 
-func (is *InstanceStubs) SynchronizeMappings(EbpfHandler, reporter.ExecutableReporter,
+func (is *InstanceStubs) SynchronizeMappings(EbpfHandler,
 	process.Process, []process.RawMapping) error {
 	return nil
 }

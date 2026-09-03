@@ -15,11 +15,9 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
-	"go.opentelemetry.io/ebpf-profiler/process"
-	"go.opentelemetry.io/ebpf-profiler/process/processcontext"
 	pmebpf "go.opentelemetry.io/ebpf-profiler/processmanager/ebpfapi"
 	eim "go.opentelemetry.io/ebpf-profiler/processmanager/execinfomanager"
-	"go.opentelemetry.io/ebpf-profiler/reporter"
+	"go.opentelemetry.io/ebpf-profiler/processmanager/processwatcher"
 	"go.opentelemetry.io/ebpf-profiler/times"
 	"go.opentelemetry.io/ebpf-profiler/util"
 )
@@ -115,12 +113,6 @@ type ProcessManager struct {
 	// kernelSymbols resolves raw kernel frame addresses.
 	kernelSymbols kallsyms.Resolver
 
-	// traceReporter is the interface to report traces
-	traceReporter reporter.TraceReporter
-
-	// exeReporter is the interface to report executables
-	exeReporter reporter.ExecutableReporter
-
 	// Reporting function which is used to report information to our backend.
 	metricsAddSlice func([]metrics.Metric)
 
@@ -131,16 +123,8 @@ type ProcessManager struct {
 	// filterErrorFrames determines whether error frames are dropped by `ConvertTrace`.
 	filterErrorFrames bool
 
-	metaEnrichers []process.MetaEnricher
-
-	// probeAttachers is the set of per-process probe attachers registered via
-	// RegisterProbeAttacher. Protected by mu.
-	probeAttachers []ProbeAttacher
-
-	// attachedProbes tracks which ProbeAttacher have been successfully attached to each PID.
-	// Using a set ensures each attacher is Detach-called exactly once per PID
-	// regardless of how many matching mappings triggered Attach. Protected by mu.
-	attachedProbes map[libpf.PID]map[ProbeAttacher]libpf.Void
+	// watchers receive process lifecycle events. Immutable after New.
+	watchers []processwatcher.ProcessWatcher
 }
 
 // Mapping represents an executable memory mapping of a process.
@@ -172,11 +156,9 @@ func (m *Mapping) GetOnDiskFileIdentifier() util.OnDiskFileIdentifier {
 // processInfo contains information about the executable mappings
 // and Thread Specific Data of a process.
 type processInfo struct {
-	// process metadata, updated on executable changes
-	meta process.Meta
-	// processContext is the resolved OTel process-context snapshot.
-	// Published under ProcessManager.mu.
-	processContext processcontext.Info
+	// exe is the executable path, used to detect an exec. Updated on
+	// executable changes.
+	exe libpf.String
 	// executable mappings sorted by FileID and mapping start address
 	mappings []Mapping
 	// C-library Thread Specific Data information

@@ -177,7 +177,6 @@ import (
 	npsr "go.opentelemetry.io/ebpf-profiler/nopanicslicereader"
 	"go.opentelemetry.io/ebpf-profiler/process"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
-	"go.opentelemetry.io/ebpf-profiler/reporter"
 	"go.opentelemetry.io/ebpf-profiler/successfailurecounter"
 	"go.opentelemetry.io/ebpf-profiler/support"
 	"go.opentelemetry.io/ebpf-profiler/util"
@@ -567,7 +566,7 @@ func (i *v8Instance) Detach(ebpf interpreter.EbpfHandler, pid libpf.PID) error {
 }
 
 func (i *v8Instance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
-	_ reporter.ExecutableReporter, pr process.Process, mappings []process.RawMapping,
+	pr process.Process, mappings []process.RawMapping,
 ) error {
 	pid := pr.PID()
 	i.mappingGeneration++

@@ -23,7 +23,6 @@ import (
 	npsr "go.opentelemetry.io/ebpf-profiler/nopanicslicereader"
 	"go.opentelemetry.io/ebpf-profiler/process"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
-	"go.opentelemetry.io/ebpf-profiler/reporter"
 	"go.opentelemetry.io/ebpf-profiler/successfailurecounter"
 	"go.opentelemetry.io/ebpf-profiler/util"
 )
@@ -681,8 +680,7 @@ func (i *dotnetInstance) getDacSlotPtr(slot uint) libpf.Address {
 }
 
 func (i *dotnetInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
-	exeReporter reporter.ExecutableReporter, pr process.Process,
-	mappings []process.RawMapping,
+	pr process.Process, mappings []process.RawMapping,
 ) error {
 	// get introspection data
 	cdac, err := i.d.GetOrInit(func() (dotnetCdac, error) { return i.d.newVMData(i.rm, i.bias) })
@@ -772,12 +770,6 @@ func (i *dotnetInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
 		}
 
 		log.Debugf("%v -> %v guid %v", m.Path, info.simpleName, info.guid)
-
-		exeReporter.ReportExecutable(&reporter.ExecutableMetadata{
-			MappingFile: info.mapping.Value().File,
-			Process:     pr,
-			Mapping:     m,
-		})
 
 		dotnetMappings = append(dotnetMappings, dotnetMapping{
 			start: m.Vaddr,

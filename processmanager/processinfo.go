@@ -22,7 +22,6 @@ import (
 	"syscall"
 	"time"
 
-	"go.opentelemetry.io/otel/attribute"
 	"golang.org/x/sys/unix"
 
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
@@ -34,12 +33,21 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"go.opentelemetry.io/ebpf-profiler/lpm"
 	"go.opentelemetry.io/ebpf-profiler/process"
-	"go.opentelemetry.io/ebpf-profiler/process/processcontext"
-	"go.opentelemetry.io/ebpf-profiler/reporter"
+	"go.opentelemetry.io/ebpf-profiler/processmanager/processwatcher"
 	"go.opentelemetry.io/ebpf-profiler/support"
 	"go.opentelemetry.io/ebpf-profiler/times"
 	"go.opentelemetry.io/ebpf-profiler/util"
 )
+
+// notifyWatchers calls fn on every watcher implementing the listener
+// interface T. Must be called without pm.mu held.
+func notifyWatchers[T any](watchers []processwatcher.ProcessWatcher, fn func(T)) {
+	for _, w := range watchers {
+		if l, ok := w.(T); ok {
+			fn(l)
+		}
+	}
+}
 
 // isPIDLive checks if a PID belongs to a live process. It will never produce a false negative but
 // may produce a false positive (e.g. due to permissions) in which case an error will also be
@@ -117,14 +125,14 @@ func (pm *ProcessManager) getLibcInfo(pid libpf.PID) *libc.LibcInfo {
 }
 
 // getOrCreateProcessInfo returns the processInfo for a PID.
-// If the PID is not yet known, the processInfo is created and the process
-// metadata is gathered (including configured process MetaEnrichers) without
-// the processmanager lock held.
+// If the PID is not yet known, the processInfo is created and the
+// ProcessNewListener watchers are notified without the processmanager lock
+// held.
 //
 // Returns nil on failure.
 // Caller must not hold the pm.mu lock.
 func (pm *ProcessManager) getOrCreateProcessInfo(pid libpf.PID,
-	pr process.Process) *processInfo {
+	pr process.Process, exe libpf.String) *processInfo {
 	pm.mu.RLock()
 	info, ok := pm.pidToProcessInfo[pid]
 	pm.mu.RUnlock()
@@ -132,28 +140,28 @@ func (pm *ProcessManager) getOrCreateProcessInfo(pid libpf.PID,
 		return info
 	}
 
-	// Gather metadata without holding the processmanager lock:
-	// This reads /proc and may invoke arbitrary enricher callbacks.
-	meta := pr.GetProcessMeta(pm.metaEnrichers)
-
 	pm.mu.Lock()
-	defer pm.mu.Unlock()
 
 	// Check if another goroutine registered the PID in-between.
 	if info, ok = pm.pidToProcessInfo[pid]; ok {
+		pm.mu.Unlock()
 		return info
 	}
 
 	if err := pm.ebpf.UpdatePidPageMappingInfo(pid, dummyPrefix, 0, 0); err != nil {
+		pm.mu.Unlock()
 		return nil
 	}
 
 	pm.pidPageToMappingInfoSize++
 	info = &processInfo{
-		meta:     meta,
+		exe:      exe,
 		libcInfo: nil,
 	}
 	pm.pidToProcessInfo[pid] = info
+	pm.mu.Unlock()
+
+	notifyWatchers(pm.watchers, func(l processwatcher.ProcessNewListener) { l.OnProcessNew(pr) })
 
 	return info
 }
@@ -225,27 +233,6 @@ func (pm *ProcessManager) handleNewInterpreter(pr process.Process, bias libpf.Ad
 	return anonymousMappingsWanted || instance.UsesAnonymousMappings(), nil
 }
 
-// attachProbesForMapping iterates the registered ProbeAttachers and calls Attach
-// for every attacher whose Match returns true for the given mapping.
-// Attach may be called multiple times for the same attacher if the process
-// has more than one matching mapping. The caller must hold pm.mu for writing.
-func (pm *ProcessManager) attachProbesForMapping(pr process.Process, m *process.RawMapping) {
-	pid := pr.PID()
-	for _, a := range pm.probeAttachers {
-		if !a.Match(pr, m) {
-			continue
-		}
-		if err := a.Attach(pr, m); err != nil {
-			log.Errorf("Failed to attach probe for PID %d, mapping %s: %v", pid, m.Path, err)
-			continue
-		}
-		if pm.attachedProbes[pid] == nil {
-			pm.attachedProbes[pid] = make(map[ProbeAttacher]libpf.Void)
-		}
-		pm.attachedProbes[pid][a] = libpf.Void{}
-	}
-}
-
 func (pm *ProcessManager) getELFInfo(pr process.Process, mapping *process.RawMapping,
 	elfRef *pfelf.Reference,
 ) elfInfo {
@@ -304,13 +291,6 @@ func (pm *ProcessManager) getELFInfo(pr process.Process, mapping *process.RawMap
 
 	info.addressMapper = ef.GetAddressMapper()
 	pm.elfInfoCache.Add(key, info)
-
-	pm.exeReporter.ReportExecutable(&reporter.ExecutableMetadata{
-		MappingFile:       info.mappingFile,
-		Process:           pr,
-		Mapping:           mapping,
-		DebuglinkFileName: ef.DebuglinkFileName(elfRef.FileName(), elfRef),
-	})
 
 	return info
 }
@@ -443,7 +423,6 @@ func (pm *ProcessManager) newFrameMapping(pr process.Process, m *process.RawMapp
 			anonymousMappingsWanted = updatedAnonymousMappingsWanted
 		}
 	}
-	pm.attachProbesForMapping(pr, m)
 	pm.mu.Unlock()
 
 	return libpf.NewFrameMapping(libpf.FrameMappingData{
@@ -488,10 +467,10 @@ func (pm *ProcessManager) processPIDExit(pid libpf.PID) {
 	}()
 	defer pm.ebpf.RemoveReportedPID(pid)
 	pm.mu.Lock()
-	defer pm.mu.Unlock()
 
 	info, pidExists := pm.pidToProcessInfo[pid]
 	if !pidExists {
+		pm.mu.Unlock()
 		log.Debugf("Skip process exit handling for unknown PID %d", pid)
 		return
 	}
@@ -501,6 +480,7 @@ func (pm *ProcessManager) processPIDExit(pid libpf.PID) {
 	if _, pidExitProcessed := pm.exitEvents[pid]; !pidExitProcessed {
 		pm.exitEvents[pid] = exitKTime
 	} else {
+		pm.mu.Unlock()
 		log.Debugf("Skip duplicate process exit handling for PID %d", pid)
 		return
 	}
@@ -518,10 +498,7 @@ func (pm *ProcessManager) processPIDExit(pid libpf.PID) {
 	pm.pidPageToMappingInfoSize -= min(pm.pidPageToMappingInfoSize, deleted)
 	pm.processRemovedInterpreters(pid, libpf.Set[util.OnDiskFileIdentifier]{})
 
-	for a := range pm.attachedProbes[pid] {
-		a.Detach(pid)
-	}
-	delete(pm.attachedProbes, pid)
+	pm.mu.Unlock()
 }
 
 // isInterpreterMapping reports whether a mapping should be passed to interpreter
@@ -602,26 +579,20 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 		// the case of main thread exit. Ignore it.
 	}
 
-	info := pm.getOrCreateProcessInfo(pid, pr)
+	info := pm.getOrCreateProcessInfo(pid, pr, exe)
 	if info == nil {
 		return
 	}
 
 	pm.mu.Lock()
 	// execve preserves the tgid, so a re-exec of the same path is invisible
-	// here and leaves env vars and the process context unrefreshed. Detecting
-	// it needs a sched_process_exec tracepoint.
-	updateProcessMeta := exe != libpf.NullString && exe != info.meta.Executable
+	// here and leaves the process metadata unrefreshed. Detecting it needs a
+	// sched_process_exec tracepoint.
+	execDetected := exe != libpf.NullString && exe != info.exe
 
 	// Get existing info
-	internalEnvVars := info.meta.InternalEnvVariables
 	oldMappings := info.mappings
 	newProcess := len(info.mappings) == 0
-	// An exec replaces the image, so the previous context no longer applies.
-	oldProcessContext := info.processContext
-	if updateProcessMeta {
-		oldProcessContext = processcontext.Info{}
-	}
 	var numInterpreters int
 	collectAnonymousMappings := false
 	if intrp, ok := pm.interpreters[pid]; ok {
@@ -635,6 +606,10 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 	}
 	previousAnonymousMappingsWanted := collectAnonymousMappings
 	pm.mu.Unlock()
+
+	if execDetected {
+		notifyWatchers(pm.watchers, func(l processwatcher.ProcessExecListener) { l.OnProcessExec(pr) })
+	}
 
 	// Create a lookup map for the old mappings
 	mpRemove := make(map[uint64]*Mapping, len(oldMappings))
@@ -657,9 +632,9 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 	pm.mappingStats.numProcAttempts.Add(1)
 	start := time.Now()
 
-	// Reading the payload is deferred until after GetProcessMeta so env vars
-	// are available for the merge. 0 means absent.
-	var contextMappingAddr uint64
+	// watcherMappings collects self-contained copies of all mappings observed
+	// during this pass, dispatched to the MappingsListener watchers at the end.
+	var watcherMappings []process.RawMapping
 
 	// This callback processes each memory mapping, keeping only executable
 	// file-backed mappings and executable/prctl-named anonymous or DLL mappings
@@ -667,11 +642,9 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 	// non-executable because a JIT reservation may be split across r-x/rw/--- VMAs.
 	// All other mappings are skipped.
 	numParseErrors, err := pr.IterateMappings(func(m process.RawMapping) bool {
-		if processcontext.IsContextMapping(m.IsExecutable(), m.Path) {
-			contextMappingAddr = m.Vaddr
-			// The eBPF hook on prctl(PR_SET_VMA, PR_SET_VMA_ANON_NAME) will trigger a
-			// PID resynchronization when the process names its context mapping "OTEL_CTX".
-		}
+		mCopy := m
+		mCopy.Path = libpf.Intern(m.Path).String()
+		watcherMappings = append(watcherMappings, mCopy)
 
 		interpreterMapping := isInterpreterMapping(&m)
 		interpreterMappings.add(m, collectAnonymousMappings)
@@ -798,34 +771,27 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 	pm.pidPageToMappingInfoSize += numChanges
 	pm.mu.Unlock()
 
-	// Update metadata of the process.
-	var meta process.Meta
-	if updateProcessMeta {
-		meta = pr.GetProcessMeta(pm.metaEnrichers)
-		internalEnvVars = meta.InternalEnvVariables
-	}
-
-	newProcessContextInfo := processcontext.Resolve(
-		contextMappingAddr, pid, pr.GetRemoteMemory(), oldProcessContext, internalEnvVars)
-
-	// Sort and publish the new mappings and meta.
+	// Sort and publish the new mappings.
 	slices.SortFunc(mappings, compareMapping)
 
-	info = pm.getOrCreateProcessInfo(pid, pr)
+	info = pm.getOrCreateProcessInfo(pid, pr, exe)
 	pm.mu.Lock()
 	if info != nil {
 		info.mappings = mappings
-		if updateProcessMeta {
-			info.meta = meta
+		if execDetected {
+			info.exe = exe
 		}
-		info.processContext = newProcessContextInfo
 	}
 	interpreters := pm.interpreters[pid]
 	pm.mu.Unlock()
 
+	notifyWatchers(pm.watchers, func(l processwatcher.MappingsListener) {
+		l.OnMappingsSync(pr, watcherMappings)
+	})
+
 	// Synchronize all interpreters with updated mappings
 	for _, instance := range interpreters {
-		err := instance.SynchronizeMappings(pm.ebpf, pm.exeReporter, pr, interpreterMappings.mappings())
+		err := instance.SynchronizeMappings(pm.ebpf, pr, interpreterMappings.mappings())
 		if err != nil {
 			if alive, _ := isPIDLive(pid); alive {
 				log.Debugf("Failed to handle new anonymous mapping for PID %d: %v", pid, err)
@@ -880,17 +846,6 @@ func (pm *ProcessManager) CleanupPIDs() {
 	}
 }
 
-// metaForPID returns the process metadata and process-context resource
-// attributes for pid, read under one lock.
-func (pm *ProcessManager) metaForPID(pid libpf.PID) (process.Meta, attribute.Set) {
-	pm.mu.RLock()
-	defer pm.mu.RUnlock()
-	if procInfo, ok := pm.pidToProcessInfo[pid]; ok {
-		return procInfo.meta, procInfo.processContext.ResourceAttrs
-	}
-	return process.Meta{}, attribute.Set{}
-}
-
 // findMappingForTrace locates the mapping for a given host trace.
 func (pm *ProcessManager) findMappingForTrace(pid libpf.PID, fid host.FileID,
 	addr libpf.Address) libpf.FrameMapping {
@@ -941,12 +896,12 @@ func (pm *ProcessManager) ProcessedUntil(traceCaptureKTime times.KTime) {
 		}
 	}()
 	pm.mu.Lock()
-	defer pm.mu.Unlock()
 
 	nowKTime := times.GetKTime()
 	log.Debugf("ProcessedUntil captureKT: %v latency: %v ms",
 		traceCaptureKTime, (nowKTime-traceCaptureKTime)/1e6)
 
+	var removedPIDs []libpf.PID
 	for pid, pidExitKTime := range pm.exitEvents {
 		if pidExitKTime > traceCaptureKTime {
 			continue
@@ -964,6 +919,12 @@ func (pm *ProcessManager) ProcessedUntil(traceCaptureKTime times.KTime) {
 		}
 		delete(pm.interpreters, pid)
 		delete(pm.exitEvents, pid)
+		removedPIDs = append(removedPIDs, pid)
 		log.Debugf("PID %v exit latency %v ms", pid, (nowKTime-pidExitKTime)/1e6)
+	}
+	pm.mu.Unlock()
+
+	for _, pid := range removedPIDs {
+		notifyWatchers(pm.watchers, func(l processwatcher.ProcessExitListener) { l.OnProcessExit(pid) })
 	}
 }

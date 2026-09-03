@@ -8,7 +8,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"maps"
 	"slices"
 	"time"
 
@@ -29,11 +28,9 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/metrics"
 	"go.opentelemetry.io/ebpf-profiler/nativeunwind"
 	"go.opentelemetry.io/ebpf-profiler/periodiccaller"
-	"go.opentelemetry.io/ebpf-profiler/process"
-	"go.opentelemetry.io/ebpf-profiler/process/processcontext"
 	pmebpf "go.opentelemetry.io/ebpf-profiler/processmanager/ebpfapi"
 	eim "go.opentelemetry.io/ebpf-profiler/processmanager/execinfomanager"
-	"go.opentelemetry.io/ebpf-profiler/reporter"
+	"go.opentelemetry.io/ebpf-profiler/processmanager/processwatcher"
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
 	"go.opentelemetry.io/ebpf-profiler/times"
 	"go.opentelemetry.io/ebpf-profiler/util"
@@ -65,22 +62,18 @@ type Config struct {
 	MonitorInterval       time.Duration
 	ExecutableUnloadDelay time.Duration
 	EbpfHandler           pmebpf.EbpfHandler
-	TraceReporter         reporter.TraceReporter
-	ExecutableReporter    reporter.ExecutableReporter
 	StackDeltaProvider    nativeunwind.StackDeltaProvider
 	KernelSymbolizer      *kallsyms.Symbolizer
 	FrameCacheSize        uint32
 	FilterErrorFrames     bool
-	IncludeEnvVars        libpf.Set[string]
-	ProcessMetaEnrichers  []process.MetaEnricher
+	// ProcessWatchers receive process lifecycle events. The list is immutable
+	// after New.
+	ProcessWatchers []processwatcher.ProcessWatcher
 }
 
 // New creates a new ProcessManager which is responsible for keeping track of loading
 // and unloading of symbols for processes.
 func New(ctx context.Context, cfg Config) (*ProcessManager, error) {
-	if cfg.ExecutableReporter == nil {
-		cfg.ExecutableReporter = executableReporterStub{}
-	}
 	if cfg.FrameCacheSize == 0 {
 		cfg.FrameCacheSize = DefaultFrameCacheSize
 	}
@@ -115,19 +108,6 @@ func New(ctx context.Context, cfg Config) (*ProcessManager, error) {
 		ks = cfg.KernelSymbolizer
 	}
 
-	metaEnrichers := make([]process.MetaEnricher, 0, len(cfg.ProcessMetaEnrichers)+2)
-	// Cloned: the enricher closure outlives New, and the caller owns cfg.
-	metaEnrichers = append(metaEnrichers, process.NewEnvVarsEnricher(
-		maps.Clone(cfg.IncludeEnvVars), processcontext.EnvVarSet()))
-
-	selfContainerEnricher, err := process.NewSelfContainerIDEnricher()
-	if err != nil {
-		log.Debugf("Failed to detect self container ID via inode: %v", err)
-	} else {
-		metaEnrichers = append(metaEnrichers, selfContainerEnricher)
-	}
-	metaEnrichers = append(metaEnrichers, cfg.ProcessMetaEnrichers...)
-
 	pm := &ProcessManager{
 		interpreterTracerEnabled: em.NumInterpreterLoaders() > 0,
 		eim:                      em,
@@ -137,13 +117,10 @@ func New(ctx context.Context, cfg Config) (*ProcessManager, error) {
 		ebpf:                     cfg.EbpfHandler,
 		elfInfoCache:             elfInfoCache,
 		frameCache:               frameCache,
-		traceReporter:            cfg.TraceReporter,
-		exeReporter:              cfg.ExecutableReporter,
 		kernelSymbols:            ks,
 		metricsAddSlice:          metrics.AddSlice,
 		filterErrorFrames:        cfg.FilterErrorFrames,
-		metaEnrichers:            metaEnrichers,
-		attachedProbes:           make(map[libpf.PID]map[ProbeAttacher]libpf.Void),
+		watchers:                 slices.Clone(cfg.ProcessWatchers),
 	}
 
 	collectInterpreterMetrics(ctx, pm, cfg.MonitorInterval)
@@ -370,31 +347,24 @@ func hashFrameCacheKey(fk frameCacheKey) uint32 {
 	return uint32(xxh3.Hash(pfunsafe.FromPointer(&fk)))
 }
 
-// HandleTrace processes and reports the given eBPF trace. Process metadata
-// is looked up here rather than at trace-receive time as EbpfTrace carries
-// only data sourced from eBPF. If the process has already exited and been evicted,
-// the trace is reported without that enrichment. This function is not re-entrant
-// due to frameCache not being synced. If the tracer is later updated to distribute
-// trace handling to a goroutine pool, the caching strategy needs to be updated
-// accordingly.
-func (pm *ProcessManager) HandleTrace(bpfTrace *libpf.EbpfTrace, profileType *samples.TypeMetadata) *libpf.Trace {
-	procMeta, resourceAttrs := pm.metaForPID(bpfTrace.PID)
+// HandleTrace processes the given eBPF trace: it symbolizes the raw frames
+// and builds the trace event metadata from the eBPF-sourced data. Trace
+// annotation with process-level attributes and reporting are the caller's
+// responsibility. This function is not re-entrant due to frameCache not being
+// synced. If the tracer is later updated to distribute trace handling to a
+// goroutine pool, the caching strategy needs to be updated accordingly.
+func (pm *ProcessManager) HandleTrace(bpfTrace *libpf.EbpfTrace,
+	profileType *samples.TypeMetadata) (*libpf.Trace, *samples.TraceEventMeta) {
 	meta := &samples.TraceEventMeta{
-		Timestamp:      libpf.UnixTime64(times.KTime(bpfTrace.KTime).UnixNano()),
-		Comm:           bpfTrace.Comm,
-		PID:            bpfTrace.PID,
-		TID:            bpfTrace.TID,
-		APMServiceName: "", // filled in below
-		CPU:            bpfTrace.CpuID,
-		ExecutablePath: procMeta.Executable,
-		ContainerID:    procMeta.ContainerID,
-		ProfileType:    profileType,
-		Value:          bpfTrace.Value,
-		EnvVars:        procMeta.EnvVariables,
-		ResourceAttrs:  resourceAttrs,
-		TraceID:        bpfTrace.APMTraceID,
-		SpanID:         bpfTrace.APMTransactionID,
-		ExtraMeta:      procMeta.ExtraMeta,
+		Timestamp:   libpf.UnixTime64(times.KTime(bpfTrace.KTime).UnixNano()),
+		Comm:        bpfTrace.Comm,
+		PID:         bpfTrace.PID,
+		TID:         bpfTrace.TID,
+		CPU:         bpfTrace.CpuID,
+		ProfileType: profileType,
+		Value:       bpfTrace.Value,
+		TraceID:     bpfTrace.APMTraceID,
+		SpanID:      bpfTrace.APMTransactionID,
 	}
 
 	pid := bpfTrace.PID
@@ -465,9 +435,5 @@ func (pm *ProcessManager) HandleTrace(bpfTrace *libpf.EbpfTrace, profileType *sa
 
 	meta.APMServiceName = pm.maybeNotifyAPMAgent(bpfTrace, trace, 1)
 
-	if err := pm.traceReporter.ReportTraceEvent(trace, meta); err != nil {
-		log.Errorf("Failed to report trace event: %v", err)
-	}
-
-	return trace
+	return trace, meta
 }

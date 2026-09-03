@@ -96,23 +96,17 @@ func formatFrame(frame *libpf.Frame) (string, error) {
 	return fmt.Sprintf("?+0x%x", frame.AddressOrLineno), nil
 }
 
-type traceReporter struct {
-	frames []string
-}
-
-func (t *traceReporter) ReportTraceEvent(trace *libpf.Trace, meta *samples.TraceEventMeta) error {
-	t.frames = nil
+func formatTrace(trace *libpf.Trace) ([]string, error) {
 	frames := make([]string, 0, len(trace.Frames))
 	for _, f := range trace.Frames {
 		frame := f.Value()
 		frameText, err := formatFrame(&frame)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		frames = append(frames, frameText)
 	}
-	t.frames = frames
-	return nil
+	return frames, nil
 }
 
 func ExtractTraces(ctx context.Context, pr process.Process, debug bool,
@@ -177,17 +171,14 @@ func ExtractTracesWithInterpreters(ctx context.Context, pr process.Process, debu
 	C.initialize_rodata_variables(C.u64(inverse_pac_mask), rubySkipNativeResume)
 
 	coredumpEbpfMaps := ebpfMapsCoredump{ctx: ebpfCtx}
-	traceReporter := traceReporter{}
 
 	manager, err := pm.New(todo, pm.Config{
 		InterpretersConfig:    interpretersConfig,
 		MonitorInterval:       monitorInterval,
 		ExecutableUnloadDelay: executableUnloadDelay,
 		EbpfHandler:           &coredumpEbpfMaps,
-		TraceReporter:         &traceReporter,
 		StackDeltaProvider:    elfunwindinfo.NewStackDeltaProvider(),
 		FrameCacheSize:        pm.DefaultFrameCacheSize,
-		IncludeEnvVars:        libpf.Set[string]{},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to get Interpreter manager: %v", err)
@@ -210,10 +201,14 @@ func ExtractTracesWithInterpreters(ctx context.Context, pr process.Process, debu
 			return nil, fmt.Errorf("failed to unwind lwp %v: %v", thread.LWP, rc)
 		}
 		// Symbolize traces with interpreter manager
-		manager.HandleTrace(&ebpfCtx.trace, nil)
+		trace, _ := manager.HandleTrace(&ebpfCtx.trace, nil)
+		frames, err := formatTrace(trace)
+		if err != nil {
+			return nil, err
+		}
 		info = append(info, ThreadInfo{
 			LWP:    thread.LWP,
-			Frames: traceReporter.frames,
+			Frames: frames,
 		})
 	}
 

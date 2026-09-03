@@ -27,7 +27,6 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/lpm"
 	"go.opentelemetry.io/ebpf-profiler/process"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
-	"go.opentelemetry.io/ebpf-profiler/reporter"
 	"go.opentelemetry.io/ebpf-profiler/support"
 )
 
@@ -347,7 +346,8 @@ func (i *beamInstance) UsesAnonymousMappings() bool {
 	return true
 }
 
-func (i *beamInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler, _ reporter.ExecutableReporter, pr process.Process, mappings []process.RawMapping) error {
+func (i *beamInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
+	pr process.Process, mappings []process.RawMapping) error {
 	pid := pr.PID()
 	i.mappingGeneration++
 	for idx := range mappings {

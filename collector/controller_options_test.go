@@ -15,19 +15,22 @@ import (
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/process"
+	"go.opentelemetry.io/ebpf-profiler/processmanager/processwatcher"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
 )
 
-func TestWithExecutableReporter(t *testing.T) {
-	executableReporter := &executableReporterTest{}
-	option := WithExecutableReporter(executableReporter)
-	require.Equal(t, executableReporter, option.apply(&controllerOption{}).executableReporter)
+func TestWithProcessWatcher(t *testing.T) {
+	watcher := &processWatcherTest{}
+	option := WithProcessWatcher(watcher)
+	watchers := option.apply(&controllerOption{}).processWatchers
+	require.Len(t, watchers, 1)
+	require.Equal(t, processwatcher.ProcessWatcher(watcher), watchers[0])
 }
 
-// empty struct that implements the ExecutableReporter interface
-type executableReporterTest struct{}
+// processWatcherTest implements a ProcessWatcher listener interface.
+type processWatcherTest struct{}
 
-func (e *executableReporterTest) ReportExecutable(args *reporter.ExecutableMetadata) {}
+func (w *processWatcherTest) OnProcessExit(libpf.PID) {}
 
 func TestWithOnShutdown(t *testing.T) {
 	onShutdown := func() error { return nil }

@@ -467,7 +467,7 @@ func TestSynchronizeMappingsPublishesJITRangeBeforePrefixes(t *testing.T) {
 		Flags:  elf.PF_R | elf.PF_X,
 	}}
 
-	require.NoError(t, instance.SynchronizeMappings(handler, nil, pr, mappings))
+	require.NoError(t, instance.SynchronizeMappings(handler, pr, mappings))
 	require.NotEmpty(t, handler.calls)
 	assert.Equal(t, "proc-data", handler.calls[0])
 	assert.Positive(t, handler.mappingUpdates)
@@ -492,7 +492,7 @@ func TestSynchronizeMappingsReportsPartialPublicationAfterMappingFailure(t *test
 		Flags:  elf.PF_R | elf.PF_X,
 	}}
 
-	err := instance.SynchronizeMappings(handler, nil, pr, mappings)
+	err := instance.SynchronizeMappings(handler, pr, mappings)
 	require.ErrorIs(t, err, updateErr)
 	require.ErrorContains(t, err, "JIT proc data was already published")
 	assert.Equal(t, []string{"proc-data", "interpreter-mapping"}, handler.calls)
@@ -502,7 +502,7 @@ func TestSynchronizeMappingsReportsPartialPublicationAfterMappingFailure(t *test
 
 	handler.calls = nil
 	handler.updateMappingErr = nil
-	require.NoError(t, instance.SynchronizeMappings(handler, nil, pr, mappings))
+	require.NoError(t, instance.SynchronizeMappings(handler, pr, mappings))
 	assert.Equal(t, []string{"interpreter-mapping"}, handler.calls)
 	assert.NotEmpty(t, instance.prefixes)
 }
@@ -521,7 +521,7 @@ func TestSynchronizeMappingsRetriesProcDataAfterUpdateFailure(t *testing.T) {
 		Flags:  elf.PF_R | elf.PF_X,
 	}}
 
-	require.ErrorIs(t, instance.SynchronizeMappings(handler, nil, pr, mappings), updateErr)
+	require.ErrorIs(t, instance.SynchronizeMappings(handler, pr, mappings), updateErr)
 	assert.Equal(t, []string{"proc-data"}, handler.calls)
 	assert.Zero(t, handler.mappingUpdates)
 	assert.Zero(t, instance.procInfo.Jit_start)
@@ -529,7 +529,7 @@ func TestSynchronizeMappingsRetriesProcDataAfterUpdateFailure(t *testing.T) {
 
 	handler.calls = nil
 	handler.updateProcDataErr = nil
-	require.NoError(t, instance.SynchronizeMappings(handler, nil, pr, mappings))
+	require.NoError(t, instance.SynchronizeMappings(handler, pr, mappings))
 	require.NotEmpty(t, handler.calls)
 	assert.Equal(t, "proc-data", handler.calls[0])
 	assert.Positive(t, handler.mappingUpdates)

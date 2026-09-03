@@ -30,7 +30,6 @@ import (
 	npsr "go.opentelemetry.io/ebpf-profiler/nopanicslicereader"
 	"go.opentelemetry.io/ebpf-profiler/process"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
-	"go.opentelemetry.io/ebpf-profiler/reporter"
 	"go.opentelemetry.io/ebpf-profiler/successfailurecounter"
 	"go.opentelemetry.io/ebpf-profiler/support"
 	"go.opentelemetry.io/ebpf-profiler/util"
@@ -1336,7 +1335,7 @@ func findJITRegion(mappings []process.RawMapping) (uint64, uint64, bool) {
 }
 
 func (r *rubyInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
-	_ reporter.ExecutableReporter, pr process.Process, mappings []process.RawMapping) error {
+	pr process.Process, mappings []process.RawMapping) error {
 	pid := pr.PID()
 	r.mappingGeneration++
 

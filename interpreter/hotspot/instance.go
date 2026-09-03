@@ -27,7 +27,6 @@ import (
 	npsr "go.opentelemetry.io/ebpf-profiler/nopanicslicereader"
 	"go.opentelemetry.io/ebpf-profiler/process"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
-	"go.opentelemetry.io/ebpf-profiler/reporter"
 	"go.opentelemetry.io/ebpf-profiler/successfailurecounter"
 	"go.opentelemetry.io/ebpf-profiler/support"
 	"go.opentelemetry.io/ebpf-profiler/util"
@@ -854,7 +853,7 @@ func (d *hotspotInstance) updateStubMappings(vmd *hotspotVMData,
 }
 
 func (d *hotspotInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
-	_ reporter.ExecutableReporter, pr process.Process, _ []process.RawMapping,
+	pr process.Process, _ []process.RawMapping,
 ) error {
 	vmd, err := d.d.GetOrInit(func() (hotspotVMData, error) { return d.d.newVMData(d.rm, d.bias) })
 	if err != nil {

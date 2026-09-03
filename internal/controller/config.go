@@ -6,6 +6,7 @@ import (
 
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 	"go.opentelemetry.io/ebpf-profiler/process"
+	"go.opentelemetry.io/ebpf-profiler/processmanager/processwatcher"
 
 	"go.opentelemetry.io/collector/consumer/xconsumer"
 
@@ -21,11 +22,14 @@ type Config struct {
 	PprofAddr     string
 	Version       bool
 
-	ExecutableReporter reporter.ExecutableReporter
 	// ProcessMetaEnrichers are optional hooks for enriching process metadata at
 	// process discovery and executable change time. Multiple enrichers are called in order.
 	ProcessMetaEnrichers []process.MetaEnricher
-	OnShutdown           func() error
+	// ProcessWatchers receive process lifecycle events from the process
+	// manager. Probes and other extensions that implement the listener
+	// interfaces are provided here at configuration time.
+	ProcessWatchers []processwatcher.ProcessWatcher
+	OnShutdown      func() error
 
 	// If ReporterFactory is set, it will be used to create a Reporter and set it as the Reporter field.
 	// Either ReporterFactory or Reporter must be set. If both are set, ReporterFactory will be used.

@@ -14,7 +14,6 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/metrics"
 	"go.opentelemetry.io/ebpf-profiler/process"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
-	"go.opentelemetry.io/ebpf-profiler/reporter"
 	"go.opentelemetry.io/ebpf-profiler/util"
 )
 
@@ -156,7 +155,7 @@ type Instance interface {
 	//
 	// Interpreters not needing to process these events can simply ignore them
 	// by returning nil.
-	SynchronizeMappings(ebpf EbpfHandler, exeReporter reporter.ExecutableReporter,
+	SynchronizeMappings(ebpf EbpfHandler,
 		pr process.Process, mappings []process.RawMapping) error
 
 	// UpdateLibcInfo is called when the process C-library related

@@ -37,7 +37,9 @@ type ExecutableMetadata struct {
 	// MappingFile is the reference to mapping file data.
 	MappingFile libpf.FrameMappingFile
 
-	// Process is the interface to the process holding the file.
+	// Process is the interface to the process holding the file. It is only
+	// valid for the duration of the ReportExecutable call and must not be
+	// retained.
 	Process process.Process
 
 	// Mapping is the process.RawMapping file. Process.OpenMappingFile can be used
@@ -53,6 +55,8 @@ type ExecutableMetadata struct {
 // ExecutableReporter is an optional interface to allow uploading files. There is
 // no implementation in opentelemetry-ebpf-profiler for this, but it is kept to
 // support this functionality in other (non-tree) protocol implementations.
+// Implementations are driven by processmanager.NewExecutableReporterWatcher.
 type ExecutableReporter interface {
 	ReportExecutable(args *ExecutableMetadata)
 }
+

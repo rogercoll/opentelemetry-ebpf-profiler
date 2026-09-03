@@ -27,10 +27,17 @@ import (
 	cebpf "github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
 
+	"go.opentelemetry.io/ebpf-profiler/internal/log"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/process"
+	"go.opentelemetry.io/ebpf-profiler/processmanager/processwatcher"
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
 	"go.opentelemetry.io/ebpf-profiler/tracer"
+)
+
+var (
+	_ processwatcher.MappingsListener  = (*probe)(nil)
+	_ processwatcher.ProcessExitListener = (*probe)(nil)
 )
 
 const progName = "kprobe__generic"
@@ -55,12 +62,16 @@ type probe struct {
 	target string
 	symbol string
 
-	// prog is the shared eBPF program loaded once in Load, reused across Attach calls.
+	// prog is the shared eBPF program loaded once in Load, reused across attach calls.
 	prog *cebpf.Program
 
 	mu       sync.Mutex
 	unloaded bool
 	links    map[libpf.PID][]link.Link
+	// seen tracks the mapping start addresses already offered per PID, so a
+	// mapping is attached once even though every synchronization pass
+	// delivers all mappings.
+	seen map[libpf.PID]libpf.Set[uint64]
 }
 
 func (p *probe) String() string {
@@ -75,6 +86,7 @@ func New(cfg Config) (tracer.Probe, error) {
 		target: cfg.Target,
 		symbol: cfg.Symbol,
 		links:  make(map[libpf.PID][]link.Link),
+		seen:   make(map[libpf.PID]libpf.Set[uint64]),
 	}, nil
 }
 
@@ -126,22 +138,58 @@ func (p *probe) Load(_ context.Context, reg tracer.ProbeRegistrar, probeCtx *tra
 	if !ok {
 		return fmt.Errorf("program %q not found after loading", progName)
 	}
+	p.mu.Lock()
 	p.prog = prog
+	p.mu.Unlock()
 
-	// Register for per-process callbacks instead of a global link.
-	probeCtx.AddAttacher(p)
 	return nil
 }
 
-// Match implements processmanager.ProbeAttacher.
-func (p *probe) Match(_ process.Process, mapping *process.RawMapping) bool {
+// match reports whether the mapping belongs to the configured target.
+func (p *probe) match(mapping *process.RawMapping) bool {
 	return mapping.Path == p.target ||
 		filepath.Base(mapping.Path) == filepath.Base(p.target)
 }
 
-// Attach implements processmanager.ProbeAttacher. Opens a PID-restricted uprobe
-// for the given process and stores the link for later cleanup.
-func (p *probe) Attach(pr process.Process, mapping *process.RawMapping) error {
+// OnMappingsSync implements processmanager.MappingsListener. It opens a
+// PID-restricted uprobe for every new mapping of the target executable and
+// stores the link for later cleanup.
+func (p *probe) OnMappingsSync(pr process.Process, mappings []process.RawMapping) {
+	pid := pr.PID()
+
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.prog == nil || p.unloaded {
+		// The probe is registered as a watcher at configuration time but its
+		// eBPF program only loads when the probe is enabled. Don't mark
+		// mappings as seen, so they attach on the next synchronization.
+		return
+	}
+	prevSeen := p.seen[pid]
+	seen := make(libpf.Set[uint64], len(prevSeen))
+	for i := range mappings {
+		m := &mappings[i]
+		if !m.IsExecutable() || m.IsAnonymous() || !p.match(m) {
+			continue
+		}
+		seen[m.Vaddr] = libpf.Void{}
+		if _, ok := prevSeen[m.Vaddr]; ok {
+			continue
+		}
+		if err := p.attach(pr, m); err != nil {
+			log.Errorf("Failed to attach %s for PID %d: %v", p, pid, err)
+		}
+	}
+	if len(seen) > 0 {
+		p.seen[pid] = seen
+	} else {
+		delete(p.seen, pid)
+	}
+}
+
+// attach opens a PID-restricted uprobe on the mapping's backing file.
+// Caller must hold p.mu.
+func (p *probe) attach(pr process.Process, mapping *process.RawMapping) error {
 	pid := pr.PID()
 	mappingFile, err := pr.OpenMappingFile(mapping)
 	if err != nil {
@@ -165,23 +213,21 @@ func (p *probe) Attach(pr process.Process, mapping *process.RawMapping) error {
 		return fmt.Errorf("%s: attach to PID %d: %w", p, pid, err)
 	}
 
-	p.mu.Lock()
 	if p.unloaded {
-		p.mu.Unlock()
 		// closing link due to unloaded probe
 		return lnk.Close()
 	}
 	p.links[pid] = append(p.links[pid], lnk)
-	p.mu.Unlock()
 	return nil
 }
 
-// Detach implements processmanager.ProbeAttacher. Closes all uprobe links
-// for the exiting process.
-func (p *probe) Detach(pid libpf.PID) {
+// OnProcessExit implements processmanager.ProcessExitListener. Closes all
+// uprobe links for the exiting process.
+func (p *probe) OnProcessExit(pid libpf.PID) {
 	p.mu.Lock()
 	links := p.links[pid]
 	delete(p.links, pid)
+	delete(p.seen, pid)
 	p.mu.Unlock()
 
 	for _, lnk := range links {
@@ -200,6 +246,7 @@ func (p *probe) Unload() error {
 		}
 		delete(p.links, pid)
 	}
+	clear(p.seen)
 
 	return unloadErrs
 }
