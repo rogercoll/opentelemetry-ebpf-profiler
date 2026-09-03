@@ -17,7 +17,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/metrics"
 	pmebpf "go.opentelemetry.io/ebpf-profiler/processmanager/ebpfapi"
 	eim "go.opentelemetry.io/ebpf-profiler/processmanager/execinfomanager"
-	"go.opentelemetry.io/ebpf-profiler/reporter"
+	"go.opentelemetry.io/ebpf-profiler/processmanager/processwatcher"
 	"go.opentelemetry.io/ebpf-profiler/times"
 	"go.opentelemetry.io/ebpf-profiler/util"
 )
@@ -113,9 +113,6 @@ type ProcessManager struct {
 	// kernelSymbols resolves raw kernel frame addresses.
 	kernelSymbols kallsyms.Resolver
 
-	// exeReporter is the interface to report executables
-	exeReporter reporter.ExecutableReporter
-
 	// Reporting function which is used to report information to our backend.
 	metricsAddSlice func([]metrics.Metric)
 
@@ -127,7 +124,7 @@ type ProcessManager struct {
 	filterErrorFrames bool
 
 	// watchers receive process lifecycle events. Immutable after New.
-	watchers []ProcessWatcher
+	watchers []processwatcher.ProcessWatcher
 }
 
 // Mapping represents an executable memory mapping of a process.

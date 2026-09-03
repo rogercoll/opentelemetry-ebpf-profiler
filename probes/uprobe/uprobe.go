@@ -30,8 +30,14 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/process"
+	"go.opentelemetry.io/ebpf-profiler/processmanager/processwatcher"
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
 	"go.opentelemetry.io/ebpf-profiler/tracer"
+)
+
+var (
+	_ processwatcher.MappingsListener  = (*probe)(nil)
+	_ processwatcher.ProcessExitListener = (*probe)(nil)
 )
 
 const progName = "kprobe__generic"

@@ -9,6 +9,7 @@ import (
 	"go.opentelemetry.io/collector/consumer/xconsumer"
 
 	"go.opentelemetry.io/ebpf-profiler/process"
+	"go.opentelemetry.io/ebpf-profiler/processmanager/processwatcher"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
 )
 
@@ -17,8 +18,8 @@ type Option interface {
 }
 
 type controllerOption struct {
-	executableReporter   reporter.ExecutableReporter
 	processMetaEnrichers []process.MetaEnricher
+	processWatchers      []processwatcher.ProcessWatcher
 	reporterFactory      func(cfg *reporter.Config, nextConsumer xconsumer.Profiles) (reporter.Reporter, error)
 	onShutdown           func() error
 }
@@ -27,12 +28,22 @@ type optFunc func(*controllerOption) *controllerOption
 
 func (f optFunc) apply(c *controllerOption) *controllerOption { return f(c) }
 
-// WithExecutableReporter is a function that allows to configure a ExecutableReporter.
-func WithExecutableReporter(executableReporter reporter.ExecutableReporter) Option {
+// WithProcessWatcher registers watchers receiving process lifecycle events
+// from the process manager. A watcher implements one or more of the
+// processmanager listener interfaces (e.g. reporting seen executables from
+// the mapping synchronization events).
+func WithProcessWatcher(watchers ...processwatcher.ProcessWatcher) Option {
 	return optFunc(func(option *controllerOption) *controllerOption {
-		option.executableReporter = executableReporter
+		option.processWatchers = append(option.processWatchers, watchers...)
 		return option
 	})
+}
+
+// WithExecutableReporter registers a reporter for newly seen executables. It
+// is driven by reporter.ExecutableReporterWatcher, which provides the same
+// reporting behavior the process manager owned before.
+func WithExecutableReporter(executableReporter reporter.ExecutableReporter) Option {
+	return WithProcessWatcher(reporter.NewExecutableReporterWatcher(executableReporter))
 }
 
 // WithOnShutdown is a function that allows to configure a function to be called when the controller is shutdown.

@@ -20,8 +20,8 @@ import (
 	sdtypes "go.opentelemetry.io/ebpf-profiler/nativeunwind/stackdeltatypes"
 	"go.opentelemetry.io/ebpf-profiler/process"
 	pmebpf "go.opentelemetry.io/ebpf-profiler/processmanager/ebpfapi"
+	"go.opentelemetry.io/ebpf-profiler/processmanager/processwatcher"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
-	"go.opentelemetry.io/ebpf-profiler/reporter"
 	"go.opentelemetry.io/ebpf-profiler/times"
 	"go.opentelemetry.io/ebpf-profiler/util"
 )
@@ -47,7 +47,7 @@ func (ti *TestInstance) UsesAnonymousMappings() bool {
 }
 
 func (ti *TestInstance) SynchronizeMappings(_ interpreter.EbpfHandler,
-	_ reporter.ExecutableReporter, _ process.Process, mappings []process.RawMapping,
+	_ process.Process, mappings []process.RawMapping,
 ) error {
 	ti.syncMappings = append([]process.RawMapping(nil), mappings...)
 	return nil
@@ -561,10 +561,11 @@ func TestInterpreterMappingCollectorFlushesFirstPassMappingsAfterEnable(t *testi
 	}, collector.mappings())
 }
 
-// TestSynchronizeProcessRunEnrichers verifies that meta enrichers run at process
-// discovery and again when the executable changes, so that enricher-produced
-// ExtraMeta is not lost when process metadata is refetched.
-func TestSynchronizeProcessRunEnrichers(t *testing.T) {
+// TestSynchronizeProcessNotifiesMetadataStore verifies that the MetadataStore
+// watcher collects enriched metadata at process discovery and again when the
+// executable changes, so that enricher-produced ExtraMeta is not lost when
+// process metadata is refetched.
+func TestSynchronizeProcessNotifiesMetadataStore(t *testing.T) {
 	require := require.New(t)
 	pid := libpf.PID(123)
 	key := libpf.Intern("test.key")
@@ -575,19 +576,19 @@ func TestSynchronizeProcessRunEnrichers(t *testing.T) {
 		meta.ExtraMeta = map[libpf.String]string{key: meta.Executable.String()}
 	})
 
+	store := NewMetadataStore([]process.MetaEnricher{enricher})
 	pm := &ProcessManager{
 		ebpf:             &testEbpfHandler{},
 		interpreters:     make(map[libpf.PID]map[util.OnDiskFileIdentifier]interpreter.Instance),
 		pidToProcessInfo: make(map[libpf.PID]*processInfo),
 		exitEvents:       make(map[libpf.PID]times.KTime),
-		metaEnrichers:    []process.MetaEnricher{enricher},
+		watchers:         []processwatcher.ProcessWatcher{store},
 	}
 
 	// Process first seen: gather and enrich metadata.
 	pm.SynchronizeProcess(&testProcess{pid: pid, exe: libpf.Intern("foobar")})
 	require.Equal(1, enricherCalls)
-	meta, _ := pm.metaForPID(pid)
-	require.Equal("foobar", meta.ExtraMeta[key])
+	require.Equal("foobar", store.MetaForPID(pid).ExtraMeta[key])
 
 	// Unchanged executable: don't refetch metadata, don't enrich.
 	pm.SynchronizeProcess(&testProcess{pid: pid, exe: libpf.Intern("foobar")})
@@ -596,6 +597,5 @@ func TestSynchronizeProcessRunEnrichers(t *testing.T) {
 	// Executable changed: refetch metadata and enrich.
 	pm.SynchronizeProcess(&testProcess{pid: pid, exe: libpf.Intern("foobarbaz")})
 	require.Equal(2, enricherCalls)
-	meta, _ = pm.metaForPID(pid)
-	require.Equal("foobarbaz", meta.ExtraMeta[key])
+	require.Equal("foobarbaz", store.MetaForPID(pid).ExtraMeta[key])
 }

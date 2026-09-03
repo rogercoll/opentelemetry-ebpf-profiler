@@ -44,6 +44,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/periodiccaller"
 	pm "go.opentelemetry.io/ebpf-profiler/processmanager"
 	pmebpf "go.opentelemetry.io/ebpf-profiler/processmanager/ebpf"
+	"go.opentelemetry.io/ebpf-profiler/processmanager/processwatcher"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
 	"go.opentelemetry.io/ebpf-profiler/rlimit"
 	"go.opentelemetry.io/ebpf-profiler/support"
@@ -202,9 +203,6 @@ func (t *Tracer) signalDone() {
 }
 
 type Config struct {
-	// ExecutableReporter allows to configure a ExecutableReporter to hook seen executables.
-	// NOTE: This is used by external implementations embedding opentelemtry-ebpf-profiler.
-	ExecutableReporter reporter.ExecutableReporter
 	// TraceReporter is the interface to report traces with.
 	TraceReporter reporter.TraceReporter
 	// Intervals provides access to globally configured timers and counters.
@@ -220,7 +218,7 @@ type Config struct {
 	// ProcessWatchers receive process lifecycle events from the process
 	// manager. Probes and other extensions that implement the listener
 	// interfaces are provided here at configuration time.
-	ProcessWatchers []pm.ProcessWatcher
+	ProcessWatchers []processwatcher.ProcessWatcher
 	// FilterErrorFrames indicates whether error frames should be filtered.
 	FilterErrorFrames bool
 	// FilterIdleFrames indicates whether idle frames should be filtered.
@@ -329,12 +327,11 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 		MonitorInterval:       cfg.Intervals.MonitorInterval(),
 		ExecutableUnloadDelay: cfg.Intervals.ExecutableUnloadDelay(),
 		EbpfHandler:           ebpfHandler,
-		ExecutableReporter:    cfg.ExecutableReporter,
 		StackDeltaProvider:    elfunwindinfo.NewStackDeltaProvider(),
 		KernelSymbolizer:      kernelSymbolizer,
 		FrameCacheSize:        cfg.FrameCacheSize,
 		FilterErrorFrames:     cfg.FilterErrorFrames,
-		ProcessWatchers: append([]pm.ProcessWatcher{metaStore},
+		ProcessWatchers: append([]processwatcher.ProcessWatcher{metaStore},
 			cfg.ProcessWatchers...),
 	})
 	if err != nil {

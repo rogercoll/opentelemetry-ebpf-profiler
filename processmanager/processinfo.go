@@ -33,7 +33,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"go.opentelemetry.io/ebpf-profiler/lpm"
 	"go.opentelemetry.io/ebpf-profiler/process"
-	"go.opentelemetry.io/ebpf-profiler/reporter"
+	"go.opentelemetry.io/ebpf-profiler/processmanager/processwatcher"
 	"go.opentelemetry.io/ebpf-profiler/support"
 	"go.opentelemetry.io/ebpf-profiler/times"
 	"go.opentelemetry.io/ebpf-profiler/util"
@@ -151,7 +151,7 @@ func (pm *ProcessManager) getOrCreateProcessInfo(pid libpf.PID,
 	pm.pidToProcessInfo[pid] = info
 	pm.mu.Unlock()
 
-	notifyWatchers(pm.watchers, func(l ProcessNewListener) { l.OnProcessNew(pr) })
+	notifyWatchers(pm.watchers, func(l processwatcher.ProcessNewListener) { l.OnProcessNew(pr) })
 
 	return info
 }
@@ -281,13 +281,6 @@ func (pm *ProcessManager) getELFInfo(pr process.Process, mapping *process.RawMap
 
 	info.addressMapper = ef.GetAddressMapper()
 	pm.elfInfoCache.Add(key, info)
-
-	pm.exeReporter.ReportExecutable(&reporter.ExecutableMetadata{
-		MappingFile:       info.mappingFile,
-		Process:           pr,
-		Mapping:           mapping,
-		DebuglinkFileName: ef.DebuglinkFileName(elfRef.FileName(), elfRef),
-	})
 
 	return info
 }
@@ -605,7 +598,7 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 	pm.mu.Unlock()
 
 	if execDetected {
-		notifyWatchers(pm.watchers, func(l ProcessExecListener) { l.OnProcessExec(pr) })
+		notifyWatchers(pm.watchers, func(l processwatcher.ProcessExecListener) { l.OnProcessExec(pr) })
 	}
 
 	// Create a lookup map for the old mappings
@@ -782,13 +775,13 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 	interpreters := pm.interpreters[pid]
 	pm.mu.Unlock()
 
-	notifyWatchers(pm.watchers, func(l MappingsListener) {
+	notifyWatchers(pm.watchers, func(l processwatcher.MappingsListener) {
 		l.OnMappingsSync(pr, watcherMappings)
 	})
 
 	// Synchronize all interpreters with updated mappings
 	for _, instance := range interpreters {
-		err := instance.SynchronizeMappings(pm.ebpf, pm.exeReporter, pr, interpreterMappings.mappings())
+		err := instance.SynchronizeMappings(pm.ebpf, pr, interpreterMappings.mappings())
 		if err != nil {
 			if alive, _ := isPIDLive(pid); alive {
 				log.Debugf("Failed to handle new anonymous mapping for PID %d: %v", pid, err)
@@ -922,6 +915,6 @@ func (pm *ProcessManager) ProcessedUntil(traceCaptureKTime times.KTime) {
 	pm.mu.Unlock()
 
 	for _, pid := range removedPIDs {
-		notifyWatchers(pm.watchers, func(l ProcessExitListener) { l.OnProcessExit(pid) })
+		notifyWatchers(pm.watchers, func(l processwatcher.ProcessExitListener) { l.OnProcessExit(pid) })
 	}
 }

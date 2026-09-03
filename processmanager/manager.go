@@ -30,7 +30,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/periodiccaller"
 	pmebpf "go.opentelemetry.io/ebpf-profiler/processmanager/ebpfapi"
 	eim "go.opentelemetry.io/ebpf-profiler/processmanager/execinfomanager"
-	"go.opentelemetry.io/ebpf-profiler/reporter"
+	"go.opentelemetry.io/ebpf-profiler/processmanager/processwatcher"
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
 	"go.opentelemetry.io/ebpf-profiler/times"
 	"go.opentelemetry.io/ebpf-profiler/util"
@@ -62,22 +62,18 @@ type Config struct {
 	MonitorInterval       time.Duration
 	ExecutableUnloadDelay time.Duration
 	EbpfHandler           pmebpf.EbpfHandler
-	ExecutableReporter    reporter.ExecutableReporter
 	StackDeltaProvider    nativeunwind.StackDeltaProvider
 	KernelSymbolizer      *kallsyms.Symbolizer
 	FrameCacheSize        uint32
 	FilterErrorFrames     bool
 	// ProcessWatchers receive process lifecycle events. The list is immutable
 	// after New.
-	ProcessWatchers []ProcessWatcher
+	ProcessWatchers []processwatcher.ProcessWatcher
 }
 
 // New creates a new ProcessManager which is responsible for keeping track of loading
 // and unloading of symbols for processes.
 func New(ctx context.Context, cfg Config) (*ProcessManager, error) {
-	if cfg.ExecutableReporter == nil {
-		cfg.ExecutableReporter = executableReporterStub{}
-	}
 	if cfg.FrameCacheSize == 0 {
 		cfg.FrameCacheSize = DefaultFrameCacheSize
 	}
@@ -121,7 +117,6 @@ func New(ctx context.Context, cfg Config) (*ProcessManager, error) {
 		ebpf:                     cfg.EbpfHandler,
 		elfInfoCache:             elfInfoCache,
 		frameCache:               frameCache,
-		exeReporter:              cfg.ExecutableReporter,
 		kernelSymbols:            ks,
 		metricsAddSlice:          metrics.AddSlice,
 		filterErrorFrames:        cfg.FilterErrorFrames,

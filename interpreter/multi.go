@@ -12,7 +12,6 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/metrics"
 	"go.opentelemetry.io/ebpf-profiler/process"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
-	"go.opentelemetry.io/ebpf-profiler/reporter"
 )
 
 // MultiData implements the Data interface for multiple interpreters.
@@ -101,11 +100,11 @@ func (m *MultiInstance) UsesAnonymousMappings() bool {
 
 // SynchronizeMappings synchronizes mappings for all interpreter instances.
 func (m *MultiInstance) SynchronizeMappings(ebpf EbpfHandler,
-	exeReporter reporter.ExecutableReporter, pr process.Process, mappings []process.RawMapping,
+	pr process.Process, mappings []process.RawMapping,
 ) error {
 	var errs []error
 	for _, instance := range m.instances {
-		if err := instance.SynchronizeMappings(ebpf, exeReporter, pr, mappings); err != nil {
+		if err := instance.SynchronizeMappings(ebpf, pr, mappings); err != nil {
 			errs = append(errs, err)
 		}
 	}
