@@ -217,6 +217,10 @@ type Tracer struct {
 	// that origin. Only traces with a matching origin are dispatched.
 	postTraceHandlers map[uint16][]PostTraceHandler
 
+	// reportMu serializes symbolizing and reporting between the trace
+	// handler goroutine and probes reporting held traces (ReportTrace)
+	reportMu sync.Mutex
+
 	// done is closed when the tracer encounters an unrecoverable error.
 	// Use Done() to obtain a read-only channel for use in select statements.
 	done     chan libpf.Void
@@ -1378,6 +1382,13 @@ func (t *Tracer) HandleTrace(bpfTrace *libpf.EbpfTrace) {
 			return
 		}
 	}
+	t.reportTrace(bpfTrace)
+}
+
+// reportTrace symbolizes and reports a trace, then runs its post-handlers.
+func (t *Tracer) reportTrace(bpfTrace *libpf.EbpfTrace) {
+	t.reportMu.Lock()
+	defer t.reportMu.Unlock()
 
 	origin := bpfTrace.Origin
 	trace := t.processManager.HandleTrace(bpfTrace, t.origins.lookup(origin))

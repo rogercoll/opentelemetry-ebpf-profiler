@@ -60,6 +60,8 @@ type probe struct {
 	discoverer *usdt.Discoverer
 	// originID tags this probe's traces (registered in Load)
 	originID uint16
+	// correlator joins launch traces with kernel records
+	correlator *correlator
 
 	mu       sync.Mutex
 	unloaded bool
@@ -86,8 +88,9 @@ func New(Config) (tracer.Probe, error) {
 // attachment rather than a single system-wide link.
 func (p *probe) Load(_ context.Context, reg tracer.ProbeRegistrar, probeCtx *tracer.ProbeContext) error {
 	originID, err := reg.Register(&samples.TypeMetadata{
-		SampleType: "events",
-		SampleUnit: "count",
+		SampleType:   "gpu_time",
+		SampleUnit:   "nanoseconds",
+		ReportValues: true,
 	})
 	if err != nil {
 		return fmt.Errorf("registering probe origin: %w", err)
@@ -146,6 +149,7 @@ func (p *probe) Load(_ context.Context, reg tracer.ProbeRegistrar, probeCtx *tra
 		*dst = prog
 	}
 
+	p.correlator = newCorrelator(probeCtx.ReportTrace)
 	p.reader, err = ringbuf.NewReader(p.events)
 	if err != nil {
 		return fmt.Errorf("reading %s: %w", kernelEventsMap, err)
@@ -244,6 +248,7 @@ func (p *probe) Detach(pid libpf.PID) {
 	for _, lnk := range links {
 		lnk.Close()
 	}
+	p.correlator.forget(pid)
 }
 
 func (p *probe) Unload() error {
@@ -268,12 +273,10 @@ func (p *probe) PreOrigins() []uint16 {
 	return []uint16{p.originID}
 }
 
-// PreHandleTrace implements tracer.PreTraceHandler.
-// TODO: temporary, logs the correlation ID read from the launch USDT to verify
-// the argument read. The launch/kernel correlator replaces this.
+// PreHandleTrace implements tracer.PreTraceHandler. Launch traces wait for
+// their kernel record; the correlator reports them once joined.
 func (p *probe) PreHandleTrace(trace *libpf.EbpfTrace) bool {
-	log.Infof("cuda: launch pid=%d tid=%d correlation=%d", trace.PID, trace.TID, trace.Value)
-	return true
+	return p.correlator.onLaunch(trace)
 }
 
 // kernelEvent mirrors CudaKernelEvent in support/ebpf/cuda_usdt.ebpf.c
@@ -288,8 +291,8 @@ type kernelEvent struct {
 	Name          [128]byte
 }
 
-// readKernelEvents logs kernel records until Unload closes the reader.
-// TODO: temporary, verifies the kernel USDT; the correlator consumes these.
+// readKernelEvents feeds kernel records to the correlator until Unload closes
+// the reader.
 func (p *probe) readKernelEvents() {
 	for {
 		record, err := p.reader.Read()
@@ -305,8 +308,6 @@ func (p *probe) readKernelEvents() {
 			log.Warnf("cuda: decoding kernel event: %v", err)
 			continue
 		}
-		name, _, _ := bytes.Cut(ev.Name[:], []byte{0})
-		log.Infof("cuda: kernel pid=%d correlation=%d duration=%dns device=%d stream=%d name=%s",
-			ev.PID, ev.CorrelationID, ev.End-ev.Start, ev.DeviceID, ev.StreamID, name)
+		p.correlator.onKernel(ev)
 	}
 }

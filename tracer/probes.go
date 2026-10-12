@@ -22,8 +22,16 @@ type ProbeContext struct {
 	maps             map[string]*cebpf.Map
 	sysVars          SysConfigVars
 	registerAttacher func(pm.ProbeAttacher) error
+	reportTrace      func(*libpf.EbpfTrace)
 	KernelSymbolizer *kallsyms.Symbolizer
 	reg              ProbeRegistrar
+}
+
+// ReportTrace symbolizes and reports a trace the probe held back in
+// PreHandleTrace (by returning false), skipping the pre-handlers. The tracer
+// takes ownership of trace.
+func (c *ProbeContext) ReportTrace(trace *libpf.EbpfTrace) {
+	c.reportTrace(trace)
 }
 
 // CollectionSpecWith returns a filtered CollectionSpec built from the tracer's embedded
@@ -460,6 +468,7 @@ func (t *Tracer) Enable(ctx context.Context, p Probe) error {
 			t.processManager.RegisterProbeAttacher(a)
 			return nil
 		},
+		reportTrace:      t.reportTrace,
 		KernelSymbolizer: t.kernelSymbolizer,
 	}
 
