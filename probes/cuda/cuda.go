@@ -16,7 +16,9 @@
 package cuda // import "go.opentelemetry.io/ebpf-profiler/probes/cuda"
 
 import (
+	"bytes"
 	"context"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"path/filepath"
@@ -24,6 +26,7 @@ import (
 
 	cebpf "github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
+	"github.com/cilium/ebpf/ringbuf"
 
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
@@ -35,7 +38,11 @@ import (
 )
 
 const (
-	progName = "kprobe__usdt_arg0"
+	// Collects the launch stack, value = correlation ID
+	launchProgName = "kprobe__usdt_arg0"
+	// Sends one kernel record to userspace
+	kernelProgName  = "kprobe__cuda_kernel"
+	kernelEventsMap = "cuda_kernel_events"
 	// Agent library, matched by file name
 	agentLibrary = "libcudaprofiling.so"
 	usdtProvider = "gpuprofiling"
@@ -44,8 +51,12 @@ const (
 type Config struct{}
 
 type probe struct {
-	// prog is the shared eBPF program loaded once in Load, reused across Attach calls.
-	prog       *cebpf.Program
+	// Shared eBPF programs loaded once in Load, reused across Attach calls.
+	launchProg *cebpf.Program
+	kernelProg *cebpf.Program
+	// events and reader carry kernel records from eBPF
+	events     *cebpf.Map
+	reader     *ringbuf.Reader
 	discoverer *usdt.Discoverer
 	// originID tags this probe's traces (registered in Load)
 	originID uint16
@@ -70,7 +81,7 @@ func New(Config) (tracer.Probe, error) {
 	}, nil
 }
 
-// Load implements tracer.Probe. It loads the shared eBPF program once and registers
+// Load implements tracer.Probe. It loads the shared eBPF programs once and registers
 // the probe as a per-process attacher so that SynchronizeProcess drives per-PID
 // attachment rather than a single system-wide link.
 func (p *probe) Load(_ context.Context, reg tracer.ProbeRegistrar, probeCtx *tracer.ProbeContext) error {
@@ -84,8 +95,8 @@ func (p *probe) Load(_ context.Context, reg tracer.ProbeRegistrar, probeCtx *tra
 	p.originID = originID
 
 	coll, err := probeCtx.CollectionSpecWith(
-		nil,
-		[]string{progName},
+		[]string{kernelEventsMap},
+		[]string{launchProgName, kernelProgName},
 		[]string{"origin_id_probe"},
 	)
 	if err != nil {
@@ -100,14 +111,23 @@ func (p *probe) Load(_ context.Context, reg tracer.ProbeRegistrar, probeCtx *tra
 		return err
 	}
 
-	if err := probeCtx.RewriteMaps(coll, nil); err != nil {
+	p.events, err = cebpf.NewMap(coll.Maps[kernelEventsMap])
+	if err != nil {
+		return fmt.Errorf("creating %s: %w", kernelEventsMap, err)
+	}
+	if err := probeCtx.RewriteMaps(coll, map[string]*cebpf.Map{kernelEventsMap: p.events}); err != nil {
 		return err
 	}
 
 	ebpfProgs := make(map[string]*cebpf.Program)
 	if err := probeCtx.LoadProbeUnwinders(coll, ebpfProgs, []tracer.ProgLoaderHelper{
 		{
-			Name:             progName,
+			Name:             launchProgName,
+			NoTailCallTarget: true,
+			Enable:           true,
+		},
+		{
+			Name:             kernelProgName,
 			NoTailCallTarget: true,
 			Enable:           true,
 		},
@@ -115,16 +135,29 @@ func (p *probe) Load(_ context.Context, reg tracer.ProbeRegistrar, probeCtx *tra
 		return err
 	}
 
-	prog, ok := ebpfProgs[progName]
-	if !ok {
-		return fmt.Errorf("program %q not found after loading", progName)
+	for name, dst := range map[string]**cebpf.Program{
+		launchProgName: &p.launchProg,
+		kernelProgName: &p.kernelProg,
+	} {
+		prog, ok := ebpfProgs[name]
+		if !ok {
+			return fmt.Errorf("program %q not found after loading", name)
+		}
+		*dst = prog
 	}
-	p.prog = prog
+
+	p.reader, err = ringbuf.NewReader(p.events)
+	if err != nil {
+		return fmt.Errorf("reading %s: %w", kernelEventsMap, err)
+	}
+	go p.readKernelEvents()
 
 	// Register for per-process callbacks instead of a global link.
 	if err := probeCtx.AddAttacher(p); err != nil {
-		_ = p.prog.Close()
-		p.prog = nil
+		_ = p.reader.Close()
+		_ = p.events.Close()
+		_ = p.launchProg.Close()
+		_ = p.kernelProg.Close()
 		return fmt.Errorf("registering process attacher: %w", err)
 	}
 	return nil
@@ -135,8 +168,8 @@ func (p *probe) Match(_ process.Process, mapping *process.RawMapping) bool {
 	return filepath.Base(mapping.Path) == agentLibrary
 }
 
-// Attach implements processmanager.ProbeAttacher. Attaches the stack-collecting
-// program at the agent's "launch" USDT for this process.
+// Attach implements processmanager.ProbeAttacher. Attaches the launch and
+// kernel programs at the agent's USDTs for this process.
 func (p *probe) Attach(pr process.Process, mapping *process.RawMapping) error {
 	pid := pr.PID()
 	mappingFile, err := pr.OpenMappingFile(mapping)
@@ -167,11 +200,20 @@ func (p *probe) Attach(pr process.Process, mapping *process.RawMapping) error {
 	}
 
 	for _, pt := range points {
-		if pt.Provider != usdtProvider || pt.Name != "launch" {
+		if pt.Provider != usdtProvider {
+			continue
+		}
+		var prog *cebpf.Program
+		switch pt.Name {
+		case "launch":
+			prog = p.launchProg
+		case "kernel":
+			prog = p.kernelProg
+		default:
 			continue
 		}
 		// Address is the USDT's file offset; no symbol lookup
-		lnk, err := ex.Uprobe("", p.prog, &link.UprobeOptions{
+		lnk, err := ex.Uprobe("", prog, &link.UprobeOptions{
 			PID:     int(pid),
 			Address: pt.Location,
 		})
@@ -215,6 +257,8 @@ func (p *probe) Unload() error {
 		}
 		delete(p.links, pid)
 	}
+	// Ends readKernelEvents
+	unloadErrs = errors.Join(unloadErrs, p.reader.Close(), p.events.Close())
 
 	return unloadErrs
 }
@@ -230,4 +274,39 @@ func (p *probe) PreOrigins() []uint16 {
 func (p *probe) PreHandleTrace(trace *libpf.EbpfTrace) bool {
 	log.Infof("cuda: launch pid=%d tid=%d correlation=%d", trace.PID, trace.TID, trace.Value)
 	return true
+}
+
+// kernelEvent mirrors CudaKernelEvent in support/ebpf/cuda_usdt.ebpf.c
+type kernelEvent struct {
+	CorrelationID uint64
+	Start         uint64
+	End           uint64
+	PID           uint32
+	DeviceID      uint32
+	StreamID      uint32
+	_             uint32
+	Name          [128]byte
+}
+
+// readKernelEvents logs kernel records until Unload closes the reader.
+// TODO: temporary, verifies the kernel USDT; the correlator consumes these.
+func (p *probe) readKernelEvents() {
+	for {
+		record, err := p.reader.Read()
+		if errors.Is(err, ringbuf.ErrClosed) {
+			return
+		}
+		if err != nil {
+			log.Warnf("cuda: reading kernel event: %v", err)
+			continue
+		}
+		var ev kernelEvent
+		if err := binary.Read(bytes.NewReader(record.RawSample), binary.LittleEndian, &ev); err != nil {
+			log.Warnf("cuda: decoding kernel event: %v", err)
+			continue
+		}
+		name, _, _ := bytes.Cut(ev.Name[:], []byte{0})
+		log.Infof("cuda: kernel pid=%d correlation=%d duration=%dns device=%d stream=%d name=%s",
+			ev.PID, ev.CorrelationID, ev.End-ev.Start, ev.DeviceID, ev.StreamID, name)
+	}
 }

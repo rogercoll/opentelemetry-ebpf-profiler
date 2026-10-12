@@ -1,6 +1,7 @@
 #include "bpfdefs.h"
 #include "tracemgmt.h"
 #include "types.h"
+#include "usdt_args.h"
 
 // origin_id_probe is set during load time.
 BPF_RODATA_VAR(u16, origin_id_probe, 0)
@@ -29,16 +30,6 @@ int kprobe__generic(struct pt_regs *ctx)
 {
   return probe__generic(ctx, 0);
 }
-
-// First USDT argument, from the first calling-convention register. Producers
-// must pin it there (see cudaprofiling's probes.rs).
-#if defined(__x86_64__)
-  #define USDT_ARG0(ctx) ((ctx)->di)
-#elif defined(__aarch64__)
-  #define USDT_ARG0(ctx) ((ctx)->regs[0])
-#else
-  #error "Unsupported architecture"
-#endif
 
 // kprobe__usdt_arg0 collects a trace whose value is the first USDT argument.
 SEC("kprobe/usdt_arg0")

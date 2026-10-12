@@ -726,8 +726,9 @@ func loadAllMaps(coll *cebpf.CollectionSpec, cfg *Config,
 	noPrealloc := probeNoPrealloc()
 
 	for mapName, mapSpec := range coll.Maps {
-		if mapName == "sched_times" {
-			// sched_times is owned by the off-CPU probe and created there on demand.
+		switch mapName {
+		case "sched_times", "cuda_kernel_events":
+			// Owned by the off-CPU and cuda probes and created there on demand.
 			continue
 		}
 		if mapName == obiSpanTracesMap {
