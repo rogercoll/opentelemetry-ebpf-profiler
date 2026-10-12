@@ -25,6 +25,7 @@ import (
 	cebpf "github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
 
+	"go.opentelemetry.io/ebpf-profiler/internal/log"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"go.opentelemetry.io/ebpf-profiler/process"
@@ -34,7 +35,7 @@ import (
 )
 
 const (
-	progName = "kprobe__generic"
+	progName = "kprobe__usdt_arg0"
 	// Agent library, matched by file name
 	agentLibrary = "libcudaprofiling.so"
 	usdtProvider = "gpuprofiling"
@@ -46,6 +47,8 @@ type probe struct {
 	// prog is the shared eBPF program loaded once in Load, reused across Attach calls.
 	prog       *cebpf.Program
 	discoverer *usdt.Discoverer
+	// originID tags this probe's traces (registered in Load)
+	originID uint16
 
 	mu       sync.Mutex
 	unloaded bool
@@ -78,6 +81,7 @@ func (p *probe) Load(_ context.Context, reg tracer.ProbeRegistrar, probeCtx *tra
 	if err != nil {
 		return fmt.Errorf("registering probe origin: %w", err)
 	}
+	p.originID = originID
 
 	coll, err := probeCtx.CollectionSpecWith(
 		nil,
@@ -213,4 +217,17 @@ func (p *probe) Unload() error {
 	}
 
 	return unloadErrs
+}
+
+// PreOrigins implements tracer.PreTraceHandler.
+func (p *probe) PreOrigins() []uint16 {
+	return []uint16{p.originID}
+}
+
+// PreHandleTrace implements tracer.PreTraceHandler.
+// TODO: temporary, logs the correlation ID read from the launch USDT to verify
+// the argument read. The launch/kernel correlator replaces this.
+func (p *probe) PreHandleTrace(trace *libpf.EbpfTrace) bool {
+	log.Infof("cuda: launch pid=%d tid=%d correlation=%d", trace.PID, trace.TID, trace.Value)
+	return true
 }
