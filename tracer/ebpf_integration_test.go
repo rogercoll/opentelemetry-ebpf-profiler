@@ -139,7 +139,6 @@ func TestTracerErrorPropagation(t *testing.T) {
 		SamplesPerSecond:       20,
 		MapScaleFactor:         0,
 		KernelVersionCheck:     true,
-		BPFVerifierLogLevel:    0,
 		ProbabilisticInterval:  100,
 		ProbabilisticThreshold: 100,
 
@@ -182,7 +181,6 @@ func TestTracerMapMonitorsError(t *testing.T) {
 		SamplesPerSecond:       20,
 		MapScaleFactor:         0,
 		KernelVersionCheck:     true,
-		BPFVerifierLogLevel:    0,
 		ProbabilisticInterval:  100,
 		ProbabilisticThreshold: 100,
 
@@ -209,7 +207,6 @@ func TestTraceTransmissionAndParsing(t *testing.T) {
 		SamplesPerSecond:       20,
 		MapScaleFactor:         0,
 		KernelVersionCheck:     true,
-		BPFVerifierLogLevel:    0,
 		ProbabilisticInterval:  100,
 		ProbabilisticThreshold: 100,
 

@@ -263,8 +263,6 @@ type Config struct {
 	KernelVersionCheck bool
 	// VerboseMode indicates whether to enable verbose output of eBPF tracers.
 	VerboseMode bool
-	// BPFVerifierLogLevel is the log level of the eBPF verifier output.
-	BPFVerifierLogLevel uint32
 	// ProbabilisticInterval is the time interval for which probabilistic profiling will be enabled.
 	ProbabilisticInterval time.Duration
 	// ProbabilisticThreshold is the threshold for probabilistic profiling.
@@ -532,8 +530,7 @@ func initializeMapsAndPrograms(kmod *kallsyms.Module, cfg *Config, origins *orig
 		}
 	}
 
-	if err = loadPerfUnwinders(coll, ebpfProgs, ebpfMaps["perf_progs"], tailCallProgs,
-		cfg.BPFVerifierLogLevel); err != nil {
+	if err = loadPerfUnwinders(coll, ebpfProgs, ebpfMaps["perf_progs"], tailCallProgs); err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to load perf eBPF programs: %v", err)
 	}
 
@@ -542,8 +539,8 @@ func initializeMapsAndPrograms(kmod *kallsyms.Module, cfg *Config, origins *orig
 	// to per_cpu_records_kp so a perf sampler can't clobber an in-flight uprobe unwind;
 	// the perf unwinder keeps per_cpu_records.
 	if err = loadProbeUnwinders(coll, ebpfProgs, ebpfMaps["kprobe_progs"], tailCallProgs,
-		cfg.BPFVerifierLogLevel, ebpfMaps["perf_progs"].FD(),
-		ebpfMaps["per_cpu_records"].FD(), ebpfMaps["per_cpu_records_kp"]); err != nil {
+		ebpfMaps["perf_progs"].FD(), ebpfMaps["per_cpu_records"].FD(),
+		ebpfMaps["per_cpu_records_kp"]); err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to load kprobe eBPF programs: %v", err)
 	}
 
@@ -800,12 +797,7 @@ func loadAllMaps(coll *cebpf.CollectionSpec, cfg *Config,
 // loadPerfUnwinders loads all perf eBPF Programs and their tail call targets.
 func loadPerfUnwinders(coll *cebpf.CollectionSpec, ebpfProgs map[string]*cebpf.Program,
 	tailcallMap *cebpf.Map, tailCallProgs []ProgLoaderHelper,
-	bpfVerifierLogLevel uint32,
 ) error {
-	programOptions := cebpf.ProgramOptions{
-		LogLevel: cebpf.LogLevel(bpfVerifierLogLevel),
-	}
-
 	progs := make([]ProgLoaderHelper, len(tailCallProgs)+3)
 	copy(progs, tailCallProgs)
 
@@ -843,7 +835,7 @@ func loadPerfUnwinders(coll *cebpf.CollectionSpec, ebpfProgs map[string]*cebpf.P
 		}
 
 		if err := loadProgram(ebpfProgs, tailcallMap, unwindProg.ProgID, progSpec,
-			programOptions, unwindProg.NoTailCallTarget); err != nil {
+			unwindProg.NoTailCallTarget); err != nil {
 			return err
 		}
 	}
@@ -876,13 +868,8 @@ func progArrayReferences(perfTailCallMapFD int, insns asm.Instructions) []int {
 // specification of these programs to xProbe eBPF programs and adjusts tail call maps if needed.
 func loadProbeUnwinders(coll *cebpf.CollectionSpec, ebpfProgs map[string]*cebpf.Program,
 	tailcallMap *cebpf.Map, progs []ProgLoaderHelper,
-	bpfVerifierLogLevel uint32, perfTailCallMapFD int,
-	perCPURecordsFD int, perCPURecordsKprobeMap *cebpf.Map,
+	perfTailCallMapFD int, perCPURecordsFD int, perCPURecordsKprobeMap *cebpf.Map,
 ) error {
-	programOptions := cebpf.ProgramOptions{
-		LogLevel: cebpf.LogLevel(bpfVerifierLogLevel),
-	}
-
 	for _, unwindProg := range progs {
 		if !unwindProg.Enable {
 			continue
@@ -918,7 +905,7 @@ func loadProbeUnwinders(coll *cebpf.CollectionSpec, ebpfProgs map[string]*cebpf.
 		}
 
 		if err := loadProgram(ebpfProgs, tailcallMap, unwindProg.ProgID, progSpec,
-			programOptions, unwindProg.NoTailCallTarget); err != nil {
+			unwindProg.NoTailCallTarget); err != nil {
 			return fmt.Errorf("failed to load %s: %v", unwindProgName, err)
 		}
 	}
@@ -928,8 +915,7 @@ func loadProbeUnwinders(coll *cebpf.CollectionSpec, ebpfProgs map[string]*cebpf.
 
 // loadProgram loads an eBPF program from progSpec and populates the related maps.
 func loadProgram(ebpfProgs map[string]*cebpf.Program, tailcallMap *cebpf.Map,
-	progID uint32, progSpec *cebpf.ProgramSpec, programOptions cebpf.ProgramOptions,
-	noTailCallTarget bool,
+	progID uint32, progSpec *cebpf.ProgramSpec, noTailCallTarget bool,
 ) error {
 	restoreRlimit, err := rlimit.MaximizeMemlock()
 	if err != nil {
@@ -939,8 +925,21 @@ func loadProgram(ebpfProgs map[string]*cebpf.Program, tailcallMap *cebpf.Map,
 
 	// Load the eBPF program into the kernel. If no error is returned,
 	// the eBPF program can be used/called/triggered from now on.
-	unwinder, err := cebpf.NewProgramWithOptions(progSpec, programOptions)
+	unwinder, err := cebpf.NewProgram(progSpec)
 	if err != nil {
+		// On failure, cilium/ebpf already retries with a branch level verifier log.
+		// In debug mode, load once more for the far more detailed per instruction
+		// log. It is not requested upfront, as producing it slows down every
+		// successful load.
+		if log.DebugEnabled() {
+			prog, debugErr := cebpf.NewProgramWithOptions(progSpec,
+				cebpf.ProgramOptions{LogLevel: cebpf.LogLevelInstruction})
+			if debugErr != nil {
+				err = debugErr
+			} else {
+				prog.Close()
+			}
+		}
 		// These errors tend to have hundreds of lines (or more),
 		// so we print each line individually.
 		if ve, ok := err.(*cebpf.VerifierError); ok {

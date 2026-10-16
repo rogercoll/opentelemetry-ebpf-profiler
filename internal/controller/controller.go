@@ -95,7 +95,6 @@ func (c *Controller) Start(ctx context.Context) error {
 		FrameCacheSize:              uint32(c.config.FrameCacheSize),
 		KernelVersionCheck:          !c.config.NoKernelVersionCheck,
 		VerboseMode:                 c.config.VerboseMode,
-		BPFVerifierLogLevel:         uint32(c.config.BPFVerifierLogLevel),
 		ProbabilisticInterval:       c.config.ProbabilisticInterval,
 		ProbabilisticThreshold:      c.config.ProbabilisticThreshold,
 		IncludeEnvVars:              envVars,

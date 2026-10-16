@@ -86,7 +86,7 @@ func (p *probe) Load(_ context.Context, reg tracer.ProbeRegistrar, probeCtx *tra
 	if err := probeCtx.LoadProbeUnwinders(coll, ebpfProgs, []tracer.ProgLoaderHelper{
 		{Name: "finish_task_switch", NoTailCallTarget: true, Enable: true},
 		{Name: "tracepoint__sched_switch", NoTailCallTarget: true, Enable: true},
-	}, 0); err != nil {
+	}); err != nil {
 		return err
 	}
 

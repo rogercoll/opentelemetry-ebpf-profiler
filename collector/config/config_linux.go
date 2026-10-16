@@ -64,7 +64,6 @@ type Config struct {
 	VerboseMode                 bool                               `mapstructure:"verbose_mode"`
 	IncludeEnvVars              string                             `mapstructure:"include_env_vars"`
 	MapScaleFactor              uint                               `mapstructure:"map_scale_factor"`
-	BPFVerifierLogLevel         uint                               `mapstructure:"bpf_verifier_log_level"`
 	NoKernelVersionCheck        bool                               `mapstructure:"no_kernel_version_check"`
 	MaxGRPCRetries              uint32                             `mapstructure:"max_grpc_retries"`
 	MaxRPCMsgSize               int                                `mapstructure:"max_rpc_msg_size"`
@@ -114,10 +113,6 @@ func (cfg *Config) Validate() error {
 			"eBPF map scaling factor %d exceeds limit (max: %d)",
 			cfg.MapScaleFactor, MaxArgMapScaleFactor,
 		)
-	}
-
-	if cfg.BPFVerifierLogLevel > 2 {
-		return fmt.Errorf("invalid eBPF verifier log level: %d", cfg.BPFVerifierLogLevel)
 	}
 
 	if cfg.ProbabilisticInterval < 1*time.Minute || cfg.ProbabilisticInterval > 5*time.Minute {

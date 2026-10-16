@@ -194,7 +194,6 @@ func (c *ProbeContext) LoadProbeUnwinders(
 	coll *cebpf.CollectionSpec,
 	ebpfProgs map[string]*cebpf.Program,
 	progs []ProgLoaderHelper,
-	bpfVerifierLogLevel uint32,
 ) error {
 	if err := syncVariablesToMapSpecs(coll); err != nil {
 		return err
@@ -226,7 +225,7 @@ func (c *ProbeContext) LoadProbeUnwinders(
 		return fmt.Errorf("per_cpu_records_kp map not available")
 	}
 	return loadProbeUnwinders(coll, ebpfProgs, kprobeProgs, progs,
-		bpfVerifierLogLevel, perfProgs.FD(), perCPURecords.FD(), perCPURecordsKp)
+		perfProgs.FD(), perCPURecords.FD(), perCPURecordsKp)
 }
 
 // CollectTrampolineRef describes what an external probe's eBPF entry program needs
@@ -337,7 +336,7 @@ func (c *ProbeContext) RegisterCollectTrampoline(meta *samples.TypeMetadata, kin
 			NoTailCallTarget: true,
 			Enable:           true,
 		},
-	}, 0); err != nil {
+	}); err != nil {
 		ctxMap.Close()
 		return nil, err
 	}

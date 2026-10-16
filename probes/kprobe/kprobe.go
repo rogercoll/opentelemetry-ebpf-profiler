@@ -111,7 +111,7 @@ func (g *probe) Load(_ context.Context, reg tracer.ProbeRegistrar, probeCtx *tra
 			NoTailCallTarget: true,
 			Enable:           true,
 		},
-	}, 0); err != nil {
+	}); err != nil {
 		return err
 	}
 
